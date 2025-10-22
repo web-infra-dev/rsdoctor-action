@@ -1,14 +1,14 @@
 {
   "name": "@rsdoctor/actions",
-  "version": "0.0.1",
+  "version": "0.0.1-beta.0",
   "description": "An Rsdoctor gitHub action for bundle size analysis and reporting",
-  "main": "./index.js",
+  "main": "./dist/index.js",
   "scripts": {
     "build": "rslib build",
     "diff": "npx rsdoctor bundle-diff --html --baseline=examples/rsbuild-demo/dist/.rsdoctor/rsdoctor-data.json --current=examples/rsbuild-demo/dist/.rsdoctor/rsdoctor-data.json"
   },
   "files": [
-    "index.js",
+    "dist",
     "action.yml",
     "README.md"
   ],
