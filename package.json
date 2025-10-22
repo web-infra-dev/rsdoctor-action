@@ -1,0 +1,48 @@
+{
+  "name": "@rsdoctor/actions",
+  "version": "0.0.1",
+  "description": "An Rsdoctor gitHub action for bundle size analysis and reporting",
+  "main": "./index.js",
+  "scripts": {
+    "build": "rslib build",
+    "diff": "npx rsdoctor bundle-diff --html --baseline=examples/rsbuild-demo/dist/.rsdoctor/rsdoctor-data.json --current=examples/rsbuild-demo/dist/.rsdoctor/rsdoctor-data.json"
+  },
+  "files": [
+    "index.js",
+    "action.yml",
+    "README.md"
+  ],
+  "keywords": [
+    "github-action",
+    "bundle-size",
+    "performance",
+    "analysis"
+  ],
+  "author": "yifancong",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/web-infra-dev/rsdoctor-action.git"
+  },
+  "homepage": "https://github.com/web-infra-dev/rsdoctor-actions#readme",
+  "bugs": {
+    "url": "https://github.com/web-infra-dev/rsdoctor-action/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "@rslib/core": "^0.16.0",
+    "@types/node": "^24.5.2",
+    "@rsdoctor/cli": "1.3.3-beta.2",
+    "@rsdoctor/client": "1.3.3-beta.2",
+    "@actions/artifact": "^2.3.2",
+    "@actions/core": "^1.2.6",
+    "@actions/github": "^4.0.0",
+    "size-plugin-core": "0.0.9",
+    "yauzl": "^3.2.0"
+  },
+  "overrides": {
+    "@rsdoctor/client": "1.3.3-beta.2"
+  }
+}
