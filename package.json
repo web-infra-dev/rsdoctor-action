@@ -1,6 +1,6 @@
 {
   "name": "@rsdoctor/actions",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "An Rsdoctor gitHub action for bundle size analysis and reporting",
   "main": "./index.js",
   "scripts": {
