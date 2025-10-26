@@ -81,7 +81,7 @@ export async function downloadArtifact(artifactId: number, fileName: string) {
     };
     
   } catch (error) {
-    console.error(`❌ Failed to download and extract artifact: ${error.message}`);
+    console.error(`❌ Failed to download and extract artifact: ${error}`);
     throw error;
   }
 }
@@ -107,7 +107,7 @@ export async function downloadArtifactByCommitHash(commitHash: string, fileName:
   
   try {
     const artifacts = await githubService.listArtifacts();
-    const artifactDetails = artifacts.artifacts.find(a => a.id === artifact.id);
+    const artifactDetails = artifacts.artifacts.find((a: { id: any; }) => a.id === artifact.id);
     if (artifactDetails) {
       console.log(`📊 Artifact details:`);
       console.log(`   - Created: ${artifactDetails.created_at}`);
@@ -119,7 +119,7 @@ export async function downloadArtifactByCommitHash(commitHash: string, fileName:
       }
     }
   } catch (detailError) {
-    console.warn(`⚠️  Could not get artifact details: ${detailError.message}`);
+    console.warn(`⚠️  Could not get artifact details: ${detailError || 'Unknown error'}`);
   }
   
   console.log(`📥 Downloading artifact...`);
@@ -127,7 +127,7 @@ export async function downloadArtifactByCommitHash(commitHash: string, fileName:
   try {
     return await downloadArtifact(artifact.id, fileName);
   } catch (downloadError) {
-    console.error(`❌ Download failed with error: ${downloadError.message}`);
+    console.error(`❌ Download failed with error: ${downloadError}`);
     console.error(`💡 This usually means:`);
     console.error(`   - Token lacks 'actions:read' permission for downloading artifacts`);
     console.error(`   - Artifact is from a different workflow run`);
