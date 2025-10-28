@@ -173,8 +173,6 @@ Action 生成多种格式的综合报告：
 - ✅ **Rsbuild** - 通过 `@rsdoctor/rspack-plugin` 原生支持
 - ✅ **Webpack** - 通过 `@rsdoctor/webpack-plugin` 支持
 - ✅ **Rspack** - 通过 `@rsdoctor/rspack-plugin` 原生支持
-- ✅ **Vite** - 通过 `@rsdoctor/vite-plugin` 支持
-- ✅ **自定义构建** - 任何生成 Rsdoctor JSON 数据的工具
 
 ## 故障排除
 
