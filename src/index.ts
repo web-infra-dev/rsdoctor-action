@@ -175,11 +175,12 @@ function runRsdoctorViaNode(requirePath: string, args: string[] = []) {
               
               const commentBody = `## Rsdoctor Bundle Diff Analysis
 
+${bundleAnalysisMarkdown}
+
 A detailed bundle diff analysis has been generated using Rsdoctor. You can download and view the interactive HTML report from the workflow artifacts.
 
 📦 **Download Link**: [Download Bundle Diff Report](${artifactDownloadLink})
-
-${bundleAnalysisMarkdown}`;
+`;
 
               try {
                 await githubService.updateOrCreateComment(
