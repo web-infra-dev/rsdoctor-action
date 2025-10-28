@@ -5,7 +5,11 @@
   "main": "./dist/index.js",
   "scripts": {
     "build": "rslib build",
-    "diff": "npx rsdoctor bundle-diff --html --baseline=examples/rsbuild-demo/dist/.rsdoctor/rsdoctor-data.json --current=examples/rsbuild-demo/dist/.rsdoctor/rsdoctor-data.json"
+    "diff": "npx rsdoctor bundle-diff --html --baseline=examples/rsbuild-demo/dist/.rsdoctor/rsdoctor-data.json --current=examples/rsbuild-demo/dist/.rsdoctor/rsdoctor-data.json",
+    "test": "rstest -u",
+    "test:watch": "rstest --watch",
+    "test:coverage": "rstest --coverage",
+    "test:e2e": "playwright test"
   },
   "files": [
     "dist",
@@ -32,14 +36,19 @@
     "access": "public"
   },
   "devDependencies": {
-    "@rslib/core": "^0.16.0",
-    "@types/node": "^24.5.2",
-    "@rsdoctor/cli": "1.3.3-beta.2",
-    "@rsdoctor/client": "1.3.3-beta.2",
     "@actions/artifact": "^2.3.2",
     "@actions/core": "^1.2.6",
     "@actions/github": "^4.0.0",
-    "size-plugin-core": "0.0.9",
+    "@rsdoctor/cli": "1.3.3-beta.2",
+    "@rsdoctor/client": "1.3.3-beta.2",
+    "@rslib/core": "^0.16.0",
+    "@rstest/core": "^0.5.4",
+    "@types/node": "^24.5.2",
+    "@types/node-fetch": "^2.6.11",
+    "@types/yauzl": "^2.10.3",
+    "@playwright/test": "^1.42.1",
+    "mock-fs": "^5.2.0",
+    "nock": "^13.5.4",
     "yauzl": "^3.2.0"
   },
   "overrides": {

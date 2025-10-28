@@ -1,0 +1,30 @@
+{
+  "data": {
+    "chunkGraph": {
+      "assets": [
+        {
+          "id": 1,
+          "path": "dist/static/js/index.js",
+          "size": 52428800,
+          "chunks": ["index"]
+        },
+        {
+          "id": 2,
+          "path": "dist/static/css/index.css",
+          "size": 10485760,
+          "chunks": ["index"]
+        }
+      ],
+      "chunks": [
+        {
+          "id": "index",
+          "name": "index",
+          "initial": true,
+          "size": 62914560,
+          "assets": ["dist/static/js/index.js", "dist/static/css/index.css"]
+        }
+      ]
+    }
+  }
+}
+
