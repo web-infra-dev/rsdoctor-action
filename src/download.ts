@@ -107,7 +107,14 @@ export async function downloadArtifactByCommitHash(commitHash: string, fileName:
   
   try {
     const artifacts = await githubService.listArtifacts();
-    const artifactDetails = artifacts.artifacts.find((a: { id: any; }) => a.id === artifact.id);
+    interface Artifact {
+      id: number;
+      name: string;
+      created_at: string;
+      expired_at?: string;
+      size_in_bytes: number;
+    }
+    const artifactDetails = artifacts.artifacts.find((a: Artifact) => a.id === artifact.id);
     if (artifactDetails) {
       console.log(`📊 Artifact details:`);
       console.log(`   - Created: ${artifactDetails.created_at}`);
