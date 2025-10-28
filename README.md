@@ -167,8 +167,6 @@ This action works with any build tool that supports Rsdoctor:
 - ✅ **Rsbuild** - Native support with `@rsdoctor/rspack-plugin`
 - ✅ **Webpack** - Support via `@rsdoctor/webpack-plugin`
 - ✅ **Rspack** - Native support with `@rsdoctor/rspack-plugin`
-- ✅ **Vite** - Support via `@rsdoctor/vite-plugin`
-- ✅ **Custom Builds** - Any tool that generates Rsdoctor JSON data
 
 ## Troubleshooting
 
