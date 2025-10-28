@@ -14,6 +14,30 @@ export interface WorkflowRunParams {
   skipCommits?: number;
 }
 
+interface WorkflowRun {
+  conclusion: string;
+  head_sha: string;
+}
+
+interface Artifact {
+  id: number;
+  name: string;
+}
+
+interface Comment {
+  id: number;
+  body: string;
+}
+
+interface ApiError extends Error {
+  status?: number;
+  response?: {
+    data?: {
+      message?: string;
+    };
+  };
+}
+
 export class GitHubService {
   private octokit: any;
   private repository: Repository;
@@ -74,7 +98,8 @@ export class GitHubService {
           console.log(`✅ Found commit hash from GitHub API: ${commitHash}`);
           return commitHash;
         }
-      } catch (apiError) {
+      } catch (error) {
+        const apiError = error as ApiError;
         console.warn(`⚠️  GitHub API failed: ${apiError.message}`);
         
         const alternativeBranches = ['master', 'main', 'develop'];
@@ -93,7 +118,8 @@ export class GitHubService {
                 console.log(`✅ Found commit hash from alternative branch ${altBranch}: ${commitHash}`);
                 return commitHash;
               }
-            } catch (altError) {
+            } catch (error) {
+              const altError = error as ApiError;
               console.log(`❌ Alternative branch ${altBranch} also failed: ${altError.message}`);
             }
           }
@@ -111,17 +137,18 @@ export class GitHubService {
         if (runs.workflow_runs && runs.workflow_runs.length > 0) {
           console.log(`Found ${runs.workflow_runs.length} workflow runs for ${targetBranch}`);
           
-          const successfulRun = runs.workflow_runs.find(run => run.conclusion === 'success');
+          const successfulRun = runs.workflow_runs.find((run: WorkflowRun) => run.conclusion === 'success');
           if (successfulRun) {
             console.log(`✅ Found successful workflow run for ${targetBranch}: ${successfulRun.head_sha}`);
             return successfulRun.head_sha.substring(0, 10);
           }
           
-          const latestRun = runs.workflow_runs[0];
+          const latestRun = runs.workflow_runs[0] as WorkflowRun;
           console.log(`⚠️  No successful runs found, using latest workflow run for ${targetBranch}: ${latestRun.head_sha}`);
           return latestRun.head_sha.substring(0, 10);
         }
-      } catch (workflowError) {
+      } catch (error) {
+        const workflowError = error as ApiError;
         console.warn(`⚠️  Failed to get workflow runs: ${workflowError.message}`);
       }
 
@@ -158,7 +185,8 @@ export class GitHubService {
       console.error(`Repository: ${this.repository.owner}/${this.repository.repo}`);
       console.error(`Target branch: ${targetBranch}`);
       
-      throw new Error(`Failed to get target branch (${targetBranch}) commit: ${error.message}`);
+      const apiError = error as ApiError;
+      throw new Error(`Failed to get target branch (${targetBranch}) commit: ${apiError.message}`);
     }
   }
 
@@ -174,19 +202,19 @@ export class GitHubService {
     return artifactsResponse.data;
   }
 
-  async findArtifactByNamePattern(pattern: string) {
+  async findArtifactByNamePattern(pattern: string): Promise<Artifact | null> {
     const artifacts = await this.listArtifacts();
     
     console.log(`Looking for artifacts matching pattern: ${pattern}`);
-    console.log(`Available artifacts: ${artifacts.artifacts.map(a => a.name).join(', ')}`);
+    console.log(`Available artifacts: ${artifacts.artifacts.map((a: Artifact) => a.name).join(', ')}`);
     
-    const matchingArtifacts = artifacts.artifacts.filter(artifact => 
+    const matchingArtifacts = artifacts.artifacts.filter((artifact: Artifact) => 
       artifact.name.includes(pattern)
     );
     
     if (matchingArtifacts.length > 0) {
-      console.log(`Found ${matchingArtifacts.length} matching artifacts:`, matchingArtifacts.map(a => a.name));
-      return matchingArtifacts.sort((a, b) => b.id - a.id)[0];
+      console.log(`Found ${matchingArtifacts.length} matching artifacts:`, matchingArtifacts.map((a: Artifact) => a.name));
+      return matchingArtifacts.sort((a: Artifact, b: Artifact) => b.id - a.id)[0];
     }
     
     console.log(`No artifacts found matching pattern: ${pattern}`);
@@ -204,5 +232,55 @@ export class GitHubService {
     });
 
     return downloadResponse.data;
+  }
+
+  async findExistingComment(prNumber: number, commentPrefix: string): Promise<number | null> {
+    const { owner, repo } = this.repository;
+    
+    try {
+      const { data: comments } = await this.octokit.rest.issues.listComments({
+        owner,
+        repo,
+        issue_number: prNumber,
+      });
+
+      const existingComment = comments.find((comment: Comment) => comment.body.startsWith(commentPrefix));
+      return existingComment ? existingComment.id : null;
+    } catch (error) {
+      const apiError = error as ApiError;
+      console.warn(`Failed to find existing comment: ${apiError.message}`);
+      return null;
+    }
+  }
+
+  async updateOrCreateComment(prNumber: number, body: string): Promise<void> {
+    const { owner, repo } = this.repository;
+    const commentPrefix = '## Rsdoctor Bundle Diff Analysis';
+    
+    try {
+      const existingCommentId = await this.findExistingComment(prNumber, commentPrefix);
+
+      if (existingCommentId) {
+        console.log(`Updating existing comment: ${existingCommentId}`);
+        await this.octokit.rest.issues.updateComment({
+          owner,
+          repo,
+          comment_id: existingCommentId,
+          body,
+        });
+      } else {
+        console.log('Creating new comment');
+        await this.octokit.rest.issues.createComment({
+          owner,
+          repo,
+          issue_number: prNumber,
+          body,
+        });
+      }
+    } catch (error) {
+      const apiError = error as ApiError;
+      console.error(`Failed to update/create comment: ${apiError.message}`);
+      throw error;
+    }
   }
 }
