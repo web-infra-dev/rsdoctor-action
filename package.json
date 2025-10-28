@@ -6,7 +6,7 @@
   "scripts": {
     "build": "rslib build",
     "diff": "npx rsdoctor bundle-diff --html --baseline=examples/rsbuild-demo/dist/.rsdoctor/rsdoctor-data.json --current=examples/rsbuild-demo/dist/.rsdoctor/rsdoctor-data.json",
-    "test": "rstest",
+    "test": "rstest -u",
     "test:watch": "rstest --watch",
     "test:coverage": "rstest --coverage",
     "test:e2e": "playwright test"

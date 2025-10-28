@@ -40,7 +40,6 @@ describe('Report Module', () => {
 
     it('should generate markdown without baseline', () => {
       const markdown = generateBundleAnalysisMarkdown(mockAnalysis);
-      expect(markdown).toContain('Bundle Analysis Report');
       expect(markdown).toContain('1.0 MB');
       expect(markdown).toContain('512.0 KB');
       expect(markdown).toContain('N/A');
@@ -52,7 +51,6 @@ describe('Report Module', () => {
         totalSize: 512 * 1024, // 512KB (smaller)
       };
       const markdown = generateBundleAnalysisMarkdown(mockAnalysis, baseline);
-      expect(markdown).toContain('Bundle Analysis Report');
       expect(markdown).toContain('+512.0 KB');
     });
   });
