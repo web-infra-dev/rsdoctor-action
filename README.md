@@ -4,12 +4,43 @@ A GitHub Action for comprehensive bundle size analysis and reporting using [Rsdo
 
 ## Features
 
-- 🔍 **Comprehensive Bundle Analysis**: Detailed analysis of JavaScript, CSS, HTML, and other assets
-- 📊 **Size Comparison**: Compare current bundle sizes with baseline data from target branch
-- 📈 **HTML Reports**: Generate detailed Rsdoctor HTML diff reports
-- 📝 **GitHub Integration**: Automatic PR comments and workflow summaries
+- 🔍 Comprehensive bundle analysis: analyze JavaScript, CSS, HTML, and other assets; compare the current bundle size against the baseline from the target branch; generate a detailed Rsdoctor HTML diff report; and automatically surface results in PR comments and the workflow summary.
 
 ## Configuration
+
+See the step-by-step guide: [Rsdoctor Action Integration](https://rsdoctor.rs/guide/start/action).
+
+### 1. Configure the plugin
+
+Install the Rsdoctor plugin, enable Brief mode, and set `output.options.type: ['json']`. Example:
+
+```typescript
+// rsbuild.config.ts
+import { defineConfig } from '@rsbuild/core';
+import { pluginReact } from '@rsbuild/plugin-react';
+import { RsdoctorRspackPlugin } from '@rsdoctor/rspack-plugin';
+
+export default defineConfig({
+  plugins: [pluginReact()],
+  tools: {
+    rspack: {
+      plugins: [
+        new RsdoctorRspackPlugin({
+          disableClientServer: true,
+          output: {
+            mode: 'brief',
+            options: {
+              type: ['json'],
+            }
+          }
+        }),
+      ],
+    },
+  }
+});
+```
+
+### 2. Configure the workflow
 
 ```yaml
 - uses: web-infra-dev/rsdoctor/actions@main
@@ -28,9 +59,7 @@ A GitHub Action for comprehensive bundle size analysis and reporting using [Rsdo
 | `file_path` | Path to Rsdoctor JSON data file | Yes | - |
 | `target_branch` | Target branch for baseline comparison | No | `main` |
 
-## Usage Examples
-
-### Complete Workflow Setup
+- Example
 
 ```yaml
 name: Bundle Analysis
@@ -87,78 +116,23 @@ jobs:
           target_branch: 'main'
 ```
 
-### Rsbuild Integration Example
-
-```typescript
-// rsbuild.config.ts
-import { defineConfig } from '@rsbuild/core';
-import { pluginReact } from '@rsbuild/plugin-react';
-import { RsdoctorRspackPlugin } from '@rsdoctor/rspack-plugin';
-
-export default defineConfig({
-  plugins: [pluginReact()],
-  tools: {
-    rspack: {
-      plugins: [
-        new RsdoctorRspackPlugin({
-          disableClientServer: true,
-          output: {
-            mode: 'brief',
-            options: {
-              type: ['json'],
-            }
-          }
-        }),
-      ],
-    },
-  }
-});
-```
-
-### Webpack Integration Example
-
-```javascript
-// webpack.config.js
-const { RsdoctorWebpackPlugin } = require('@rsdoctor/webpack-plugin');
-
-module.exports = {
-  plugins: [
-    new RsdoctorWebpackPlugin({
-      disableClientServer: true,
-      output: {
-        mode: 'brief',
-        options: {
-          type: ['json'],
-        }
-      }
-    }),
-  ],
-};
-```
-
-
 ## Report Examples
 
 The Action generates comprehensive reports in multiple formats:
 
 ### 📦 Bundle Analysis Report
 
-| Metric | Current | Baseline | Change |
-|--------|---------|----------|--------|
-| 📊 Total Size | 100.0 MB | 99.0 MB | +1.0 MB (+1.0%) |
-| 📄 JavaScript | 80.0 MB | 79.0 MB | +1.0 MB (+1.3%) |
-| 🎨 CSS | 15.0 MB | 15.0 MB | 0 B (0.0%) |
-| 🌐 HTML | 2.0 MB | 2.0 MB | 0 B (0.0%) |
-| 📁 Other Assets | 3.0 MB | 3.0 MB | 0 B (0.0%) |
+<img
+  src="https://assets.rspack.rs/others/assets/rsdoctor/github-actions-opt.png"
+/>
 
 ### 📈 Interactive HTML Report
 
-When baseline data is available, the action generates an interactive HTML diff report using Rsdoctor's built-in comparison tools. This report includes:
+When baseline data is available, the action generates an interactive HTML diff report using Rsdoctor's built-in comparison tools. Click "Download Bundle Diff Report" to download the Rsdoctor diff and explore the details.
 
-- Visual bundle size comparisons
-- Detailed asset analysis
-- Chunk dependency graphs
-- Downloadable as workflow artifacts
+<img
+  src="https://assets.rspack.rs/others/assets/rsdoctor/github-actions-opt.png"
+/>
 
 ## Supported Build Tools
 
@@ -183,9 +157,6 @@ This action works with any build tool that supports Rsdoctor:
 - Baseline data will be created after the first merge to main branch
 
 
-### Debug Mode
-
-Enable debug logging by setting the `ACTIONS_STEP_DEBUG` secret to `true` in your repository settings.
 
 ## Contributing
 
@@ -198,6 +169,14 @@ MIT License - see [LICENSE](LICENSE) file for details.
 ## Related Projects
 
 - [Rsdoctor](https://github.com/web-infra-dev/rsdoctor) - The core bundle analysis tool
+
+## Next Steps
+
+We're actively working on enhancing the Rsdoctor Action with the following planned features:
+
+- **Bundle Diff Threshold Gates**: Implement configurable size increase limits that can block PR merges when bundle size exceeds predefined thresholds, helping maintain optimal performance standards.
+
+- **Enhanced Monorepo Support**: Improve support for monorepo projects by adding workspace-aware analysis, multi-package bundle tracking, and aggregated reporting across different packages within a single repository.
 
 ## Development
 

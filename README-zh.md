@@ -4,12 +4,45 @@ Rsdoctor GitHub Action，使用 [Rsdoctor](https://github.com/web-infra-dev/rsdo
 
 ## 功能特性
 
-- 🔍 **全面的打包分析**：详细分析 JavaScript、CSS、HTML 和其他资源
-- 📊 **大小比较**：将当前打包大小与目标分支的基线数据进行比较
-- 📈 **HTML 报告**：生成详细的 Rsdoctor HTML 差异报告
-- 📝 **GitHub 集成**：自动 PR 评论和工作流摘要
+- 🔍 **全面的打包分析**：详细分析 JavaScript、CSS、HTML 和其他资源，将当前打包大小与目标分支的基线数据进行比较，生成详细的 Rsdoctor HTML 差异报告，并自动在 PR 评论和工作流摘要中展示。
 
 ## 配置
+
+详细步骤可查看文档 [Rsdoctor Action 集成](https://rsdoctor.rs/guide/start/action)。
+
+### 1. 配置插件
+
+安装 Rsdoctor 插件，并开启 Brief 模式和 `output.options.type: ['json']`。配置示例如下，
+
+- Rsbuild 集成示例
+
+```typescript
+// rsbuild.config.ts
+import { defineConfig } from '@rsbuild/core';
+import { pluginReact } from '@rsbuild/plugin-react';
+import { RsdoctorRspackPlugin } from '@rsdoctor/rspack-plugin';
+
+export default defineConfig({
+  plugins: [pluginReact()],
+  tools: {
+    rspack: {
+      plugins: [
+        new RsdoctorRspackPlugin({
+          disableClientServer: true,
+          output: {
+            mode: 'brief',
+            options: {
+              type: ['json'],
+            }
+          }
+        }),
+      ],
+    },
+  }
+});
+```
+
+### 2. 配置 workflow
 
 ```yaml
 - uses: web-infra-dev/rsdoctor/actions@main
@@ -21,16 +54,14 @@ Rsdoctor GitHub Action，使用 [Rsdoctor](https://github.com/web-infra-dev/rsdo
     target_branch: 'main'
 ```
 
-### 输入参数
+#### 输入参数
 
 | 参数 | 描述 | 必需 | 默认值 |
 |------|------|------|--------|
 | `file_path` | Rsdoctor JSON 数据文件路径 | 是 | - |
 | `target_branch` | 用于基线比较的目标分支 | 否 | `main` |
 
-## 使用示例
-
-### 完整工作流设置
+- 示例
 
 ```yaml
 name: Bundle Analysis
@@ -87,84 +118,23 @@ jobs:
           target_branch: 'main'
 ```
 
-### Rsbuild 集成示例
-
-```typescript
-// rsbuild.config.ts
-import { defineConfig } from '@rsbuild/core';
-import { pluginReact } from '@rsbuild/plugin-react';
-import { RsdoctorRspackPlugin } from '@rsdoctor/rspack-plugin';
-
-export default defineConfig({
-  plugins: [pluginReact()],
-  tools: {
-    rspack: {
-      plugins: [
-        new RsdoctorRspackPlugin({
-          disableClientServer: true,
-          output: {
-            mode: 'brief',
-            options: {
-              type: ['json'],
-            }
-          }
-        }),
-      ],
-    },
-  }
-});
-```
-
-### Webpack 集成示例
-
-```javascript
-// webpack.config.js
-const { RsdoctorWebpackPlugin } = require('@rsdoctor/webpack-plugin');
-
-module.exports = {
-  plugins: [
-    new RsdoctorWebpackPlugin({
-      disableClientServer: true,
-      output: {
-        mode: 'brief',
-        options: {
-          type: ['json'],
-        }
-      }
-    }),
-  ],
-};
-```
-
-### 数据结构
-
-- **assets**：所有生成文件的数组，包含大小和关联的块信息
-- **chunks**：代码块的数组，包含初始加载和大小元数据
-- **size**：文件大小（字节），用于准确比较
-- **path**：相对文件路径，便于识别
-
 ## 报告示例
 
 Action 生成多种格式的综合报告：
 
 ### 📦 打包分析报告
 
-| 指标 | 当前 | 基线 | 变化 |
-|------|------|------|------|
-| 📊 总大小 | 100.0 MB | 99.0 MB | +1.0 MB (+1.0%) |
-| 📄 JavaScript | 80.0 MB | 79.0 MB | +1.0 MB (+1.3%) |
-| 🎨 CSS | 15.0 MB | 15.0 MB | 0 B (0.0%) |
-| 🌐 HTML | 2.0 MB | 2.0 MB | 0 B (0.0%) |
-| 📁 其他资源 | 3.0 MB | 3.0 MB | 0 B (0.0%) |
+<img
+  src="https://assets.rspack.rs/others/assets/rsdoctor/github-actions-opt.png"
+/>
 
 ### 📈 交互式 HTML 报告
 
-当基线数据可用时，Action 使用 Rsdoctor 内置的比较工具生成交互式 HTML 差异报告。此报告包括：
+当基线数据可用时，Action 使用 Rsdoctor 内置的比较工具生成交互式 HTML 差异报告。点击 「Download Bundle Diff Report」可以下载 Rsdoctor 的 diff 报告，详细查看 diff 数据。
 
-- 可视化打包大小比较
-- 详细的资源分析
-- 块依赖关系图
-- 可作为工作流工件下载
+<img
+  src="https://assets.rspack.rs/others/assets/rsdoctor/github-actions-opt.png"
+/>
 
 ## 支持的构建工具
 
@@ -189,9 +159,10 @@ Action 生成多种格式的综合报告：
 - 基线数据将在首次合并到主分支后创建
 
 
-### 调试模式
+## 下一步计划
 
-通过在仓库设置中将 `ACTIONS_STEP_DEBUG` 密钥设置为 `true` 来启用调试日志记录。
+- 增加 Bundle Diff 阈值卡点
+- Monorepo 项目更好的支持
 
 ## 贡献
 
@@ -204,6 +175,15 @@ MIT 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情。
 ## 相关项目
 
 - [Rsdoctor](https://github.com/web-infra-dev/rsdoctor) - 核心打包分析工具
+
+## 下一步计划
+
+我们正在积极开发以下功能来增强 Rsdoctor Action：
+
+- **Bundle Diff 阈值卡点**：实现可配置的大小增长限制，当打包大小超过预定义阈值时可以阻止 PR 合并，帮助维护最佳性能标准。
+
+- **Monorepo 项目更好的支持**：通过添加工作区感知分析、多包打包跟踪以及单个仓库内不同包的聚合报告，改善对 monorepo 项目的支持。
+
 
 ## 开发
 
