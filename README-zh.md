@@ -4,7 +4,7 @@ Rsdoctor GitHub Action，使用 [Rsdoctor](https://github.com/web-infra-dev/rsdo
 
 ## 功能特性
 
-- 🔍 **全面的打包分析**：详细分析 JavaScript、CSS、HTML 和其他资源，将当前打包大小与目标分支的基线数据进行比较，生成详细的 Rsdoctor HTML 差异报告，并自动在 PR 评论和工作流摘要中展示。
+详细分析 JavaScript、CSS、HTML 和其他资源，将当前打包大小与目标分支的基线数据进行比较，生成详细的 Rsdoctor HTML 差异报告，并自动在 PR 评论和工作流摘要中展示。
 
 ## 配置
 

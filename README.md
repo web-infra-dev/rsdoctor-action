@@ -4,7 +4,7 @@ A GitHub Action for comprehensive bundle size analysis and reporting using [Rsdo
 
 ## Features
 
-- 🔍 Comprehensive bundle analysis: analyze JavaScript, CSS, HTML, and other assets; compare the current bundle size against the baseline from the target branch; generate a detailed Rsdoctor HTML diff report; and automatically surface results in PR comments and the workflow summary.
+Analyze JavaScript, CSS, HTML, and other assets; compare the current bundle size against the baseline from the target branch; generate a detailed Rsdoctor HTML diff report; and automatically surface results in PR comments and the workflow summary.
 
 ## Configuration
 
