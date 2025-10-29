@@ -131,7 +131,7 @@ The Action generates comprehensive reports in multiple formats:
 When baseline data is available, the action generates an interactive HTML diff report using Rsdoctor's built-in comparison tools. Click "Download Bundle Diff Report" to download the Rsdoctor diff and explore the details.
 
 <img
-  src="https://assets.rspack.rs/others/assets/rsdoctor/github-actions-opt.png"
+  src="https://assets.rspack.rs/others/assets/rsdoctor/bundle-diff-all.png"
 />
 
 ## Supported Build Tools

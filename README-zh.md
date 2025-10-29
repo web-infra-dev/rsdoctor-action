@@ -133,7 +133,7 @@ Action 生成多种格式的综合报告：
 当基线数据可用时，Action 使用 Rsdoctor 内置的比较工具生成交互式 HTML 差异报告。点击 「Download Bundle Diff Report」可以下载 Rsdoctor 的 diff 报告，详细查看 diff 数据。
 
 <img
-  src="https://assets.rspack.rs/others/assets/rsdoctor/github-actions-opt.png"
+  src="https://assets.rspack.rs/others/assets/rsdoctor/bundle-diff-all.png"
 />
 
 ## 支持的构建工具
