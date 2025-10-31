@@ -48,7 +48,11 @@ export default defineConfig({
     # Path to Rsdoctor JSON data file (relative to project root)
     file_path: 'dist/.rsdoctor/rsdoctor-data.json'
     
-    # Target branch for comparison (defaults to main)
+    # Target branch for comparison (defaults to main). If you prefer a dynamic
+    # target based on the PR's base branch (instead of always using main), you can use:
+    # target_branch: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref || github.event.repository.default_branch }}
+    #
+    # Example with a static target branch:
     target_branch: 'main'
 ```
 
@@ -59,12 +63,17 @@ export default defineConfig({
 | `file_path` | Path to Rsdoctor JSON data file | Yes | - |
 | `target_branch` | Target branch for baseline comparison | No | `main` |
 
+- `target_branch`: If you want to use a dynamic target branch (e.g., the PR base branch instead of a fixed main), use:
+  `target_branch: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref || github.event.repository.default_branch }}`
+
 - Example
 
 ```yaml
 name: Bundle Analysis
 
-on: [pull_request, push]
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
 
 jobs:
   bundle-analysis:
@@ -113,7 +122,7 @@ jobs:
         uses: web-infra-dev/rsdoctor/actions@main
         with:
           file_path: 'dist/.rsdoctor/rsdoctor-data.json'
-          target_branch: 'main'
+          target_branch: 'main' 
 ```
 
 ## Report Examples
