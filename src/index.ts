@@ -1,5 +1,5 @@
 import { setFailed, getInput, summary } from '@actions/core';
-import { uploadArtifact } from './upload';
+import { uploadArtifact, hashPath } from './upload';
 import { downloadArtifactByCommitHash } from './download';
 import { GitHubService } from './github';
 import { loadSizeData, generateSizeReport, parseRsdoctorData, generateBundleAnalysisReport, generateBundleAnalysisMarkdown, BundleAnalysis } from './report';
@@ -11,18 +11,61 @@ const execFileAsync = promisify(execFile);
 
 function isMergeEvent(): boolean {
   const { context } = require('@actions/github');
-  return context.eventName === 'push' && context.payload.ref === `refs/heads/${context.payload.repository.default_branch}`;
-}
+  const isPR = context.eventName === 'pull_request';
 
-console.log(11)
+  if (isPR) {
+    const prAction = context.payload.action;
+    const prMerged = context.payload.pull_request?.merged;
+    const prNumber = context.payload.pull_request?.number;
+    const baseRef = context.payload.pull_request?.base?.ref;
+    const headRef = context.payload.pull_request?.head?.ref;
+
+    // Check if this is a merge event: PR closed and merged
+    const isMerge = prAction === 'closed' && prMerged === true;
+
+    if (isMerge) {
+      console.log(`🔄 Detected merge event: pull request closed and merged`);
+      console.log(`   Event: ${context.eventName}, Action: ${prAction}`);
+      console.log(`   PR #${prNumber}: ${headRef} -> ${baseRef}`);
+      console.log(`   Merged: ${prMerged}`);
+      console.log(`   This is a merge event - branch was merged to ${baseRef}`);
+    }
+
+    return isMerge;
+  }
+
+  return false;
+}
 
 function isPullRequestEvent(): boolean {
   const { context } = require('@actions/github');
-  return context.eventName === 'pull_request';
+  const isPR = context.eventName === 'pull_request';
+
+  if (isPR) {
+    const prAction = context.payload.action;
+    const prMerged = context.payload.pull_request?.merged;
+    const prNumber = context.payload.pull_request?.number;
+    const baseRef = context.payload.pull_request?.base?.ref;
+    const headRef = context.payload.pull_request?.head?.ref;
+
+    // Skip if PR is closed and merged - this should be handled by isMergeEvent
+    if (prAction === 'closed' && prMerged === true) {
+      console.log(`ℹ️  PR is closed and merged - this should be handled by merge event logic`);
+      return false;
+    }
+
+    console.log(`📥 Detected pull request event`);
+    console.log(`   Action: ${prAction}`);
+    console.log(`   PR #${prNumber}: ${headRef} -> ${baseRef}`);
+    console.log(`   Merged: ${prMerged}`);
+    console.log(`   This is a PR review/update event - comparing with baseline`);
+  }
+
+  return isPR;
 }
 
 function runRsdoctorViaNode(requirePath: string, args: string[] = []) {
-  const nodeExec = process.execPath; // 当前 node 可执行文件的绝对路径
+  const nodeExec = process.execPath;
   console.log('process.execPath =', nodeExec);
   console.log('Running:', nodeExec, requirePath, args.join(' '));
   const r = spawnSync(nodeExec, [requirePath, ...args], { stdio: 'inherit' });
@@ -50,7 +93,8 @@ function runRsdoctorViaNode(requirePath: string, args: string[] = []) {
     const currentCommitHash = githubService.getCurrentCommitHash();
     console.log(`Current commit hash: ${currentCommitHash}`);
     
-    const artifactNamePattern = `${pathParts.join('-')}-${fileNameWithoutExt}-`;
+    const pathHash = hashPath(pathParts, fileNameWithoutExt);
+    const artifactNamePattern = `${pathHash}-`;
     console.log(`Artifact name pattern: ${artifactNamePattern}`);
     
     if (isMergeEvent()) {
@@ -90,7 +134,7 @@ function runRsdoctorViaNode(requirePath: string, args: string[] = []) {
         const targetCommitHash = await githubService.getTargetBranchLatestCommit();
         console.log(`✅ Target branch commit hash: ${targetCommitHash}`);
         
-        const targetArtifactName = `${pathParts.join('-')}-${fileNameWithoutExt}-${targetCommitHash}${fileExt}`;
+        const targetArtifactName = `${pathHash}-${targetCommitHash}${fileExt}`;
         console.log(`🔍 Looking for target artifact: ${targetArtifactName}`);
         
         try {

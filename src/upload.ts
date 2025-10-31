@@ -2,6 +2,12 @@ import { DefaultArtifactClient } from '@actions/artifact';
 import path from 'path';
 import * as fs from 'fs';
 import { execSync } from 'child_process';
+import { createHash } from 'crypto';
+
+export function hashPath(pathParts: string[], fileNameWithoutExt: string): string {
+  const pathString = `${pathParts.join('-')}-${fileNameWithoutExt}`;
+  return createHash('sha256').update(pathString).digest('hex').substring(0, 8);
+}
 
 export async function uploadArtifact(filePath: string, commitHash?: string) {
   const artifactClient = new DefaultArtifactClient();
@@ -20,7 +26,8 @@ export async function uploadArtifact(filePath: string, commitHash?: string) {
   const fileNameWithoutExt = path.parse(fileName).name;
   const fileExt = path.parse(fileName).ext;
   
-  const artifactName = `${pathParts.join('-')}-${fileNameWithoutExt}-${hash}${fileExt}`;
+  const pathHash = hashPath(pathParts, fileNameWithoutExt);
+  const artifactName = `${pathHash}-${hash}${fileExt}`;
   
   console.log(`Uploading artifact: ${artifactName}`);
   console.log(`From file: ${targetFilePath}`);
