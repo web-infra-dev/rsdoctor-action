@@ -42,7 +42,7 @@ describe('Report Module', () => {
       const markdown = generateBundleAnalysisMarkdown(mockAnalysis);
       expect(markdown).toContain('1.0 MB');
       expect(markdown).toContain('512.0 KB');
-      expect(markdown).toContain('N/A');
+      expect(markdown).toMatchSnapshot();
     });
 
     it('should generate markdown with baseline', () => {
