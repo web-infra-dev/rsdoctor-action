@@ -50,8 +50,8 @@ export default defineConfig({
     # Rsdoctor JSON 数据文件路径（相对于项目根目录）
     file_path: 'dist/.rsdoctor/rsdoctor-data.json'
     
-    # 用于比较的目标分支（默认为 main）
-    target_branch: 'main'
+    # 用于比较的目标分支（默认为 main）, 如果想用动态目标分支，而不仅仅是主分支，则可以使用 `target_branch: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref || github.event.repository.default_branch }}`
+    target_branch: 'main' 
 ```
 
 #### 输入参数
@@ -61,12 +61,16 @@ export default defineConfig({
 | `file_path` | Rsdoctor JSON 数据文件路径 | 是 | - |
 | `target_branch` | 用于基线比较的目标分支 | 否 | `main` |
 
+- `target_branch`: 如果想用动态目标分支，而不仅仅是主分支，则可以使用 `target_branch: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref || github.event.repository.default_branch }}`
+
 - 示例
 
 ```yaml
 name: Bundle Analysis
 
-on: [pull_request, push]
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
 
 jobs:
   bundle-analysis:
