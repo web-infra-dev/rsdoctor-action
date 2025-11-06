@@ -1,0 +1,14 @@
+// Rstest Snapshot v1
+
+exports[`Report Module > generateBundleAnalysisMarkdown > should generate markdown without baseline 1`] = `
+"> ⚠️ **No baseline data found** - Unable to perform comparison analysis
+
+| Metric | Current | Baseline | Change |
+|--------|---------|----------|--------|
+| 📊 Total Size | 1.0 MB | - | - |
+| 📄 JavaScript | 512.0 KB | - | - |
+| 🎨 CSS | 256.0 KB | - | - |
+| 🌐 HTML | 128.0 KB | - | - |
+| 📁 Other Assets | 128.0 KB | - | - |
+"
+`;

@@ -185,11 +185,11 @@ export function generateBundleAnalysisMarkdown(current: BundleAnalysis, baseline
   
   markdown += '| Metric | Current | Baseline | Change |\n';
   markdown += '|--------|---------|----------|--------|\n';
-  markdown += `| 📊 Total Size | ${formatBytes(current.totalSize)} | ${baseline ? formatBytes(baseline.totalSize) : formatBytes(current.totalSize)} | ${baseline ? calculateDiff(current.totalSize, baseline.totalSize).value : 'N/A'} |\n`;
-  markdown += `| 📄 JavaScript | ${formatBytes(current.jsSize)} | ${baseline ? formatBytes(baseline.jsSize) : formatBytes(current.jsSize)} | ${baseline ? calculateDiff(current.jsSize, baseline.jsSize).value : 'N/A'} |\n`;
-  markdown += `| 🎨 CSS | ${formatBytes(current.cssSize)} | ${baseline ? formatBytes(baseline.cssSize) : formatBytes(current.cssSize)} | ${baseline ? calculateDiff(current.cssSize, baseline.cssSize).value : 'N/A'} |\n`;
-  markdown += `| 🌐 HTML | ${formatBytes(current.htmlSize)} | ${baseline ? formatBytes(baseline.htmlSize) : formatBytes(current.htmlSize)} | ${baseline ? calculateDiff(current.htmlSize, baseline.htmlSize).value : 'N/A'} |\n`;
-  markdown += `| 📁 Other Assets | ${formatBytes(current.otherSize)} | ${baseline ? formatBytes(baseline.otherSize) : formatBytes(current.otherSize)} | ${baseline ? calculateDiff(current.otherSize, baseline.otherSize).value : 'N/A'} |\n`;
+  markdown += `| 📊 Total Size | ${formatBytes(current.totalSize)} | ${baseline ? formatBytes(baseline.totalSize) : '-'} | ${baseline ? calculateDiff(current.totalSize, baseline.totalSize).value : '-'} |\n`;
+  markdown += `| 📄 JavaScript | ${formatBytes(current.jsSize)} | ${baseline ? formatBytes(baseline.jsSize) : '-'} | ${baseline ? calculateDiff(current.jsSize, baseline.jsSize).value : '-'} |\n`;
+  markdown += `| 🎨 CSS | ${formatBytes(current.cssSize)} | ${baseline ? formatBytes(baseline.cssSize) : '-'} | ${baseline ? calculateDiff(current.cssSize, baseline.cssSize).value : '-'} |\n`;
+  markdown += `| 🌐 HTML | ${formatBytes(current.htmlSize)} | ${baseline ? formatBytes(baseline.htmlSize) : '-'} | ${baseline ? calculateDiff(current.htmlSize, baseline.htmlSize).value : '-'} |\n`;
+  markdown += `| 📁 Other Assets | ${formatBytes(current.otherSize)} | ${baseline ? formatBytes(baseline.otherSize) : '-'} | ${baseline ? calculateDiff(current.otherSize, baseline.otherSize).value : '-'} |\n`;
   
   return markdown;
 }
