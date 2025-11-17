@@ -120,7 +120,6 @@ async function processSingleFile(
   fullPath: string,
   currentCommitHash: string,
   targetCommitHash: string | null,
-  githubService: GitHubService
 ): Promise<ProjectReport> {
   const fileName = path.basename(fullPath);
   const relativePath = path.relative(process.cwd(), fullPath);
@@ -147,15 +146,16 @@ async function processSingleFile(
   }
   report.current = currentBundleAnalysis;
   
-  // Try to download baseline if in PR event
+  let baselineJsonPath: string | null = null;
   if (targetCommitHash) {
     try {
       console.log(`📥 Attempting to download baseline for ${projectName}...`);
-      const downloadResult = await downloadArtifactByCommitHash(targetCommitHash, fileName);
-      const downloadedBaselinePath = path.join(downloadResult.downloadPath, fileName);
+      // Pass filePath to ensure we download the correct artifact by path hash
+      const downloadResult = await downloadArtifactByCommitHash(targetCommitHash, fileName, fullPath);
+      baselineJsonPath = path.join(downloadResult.downloadPath, fileName);
       
-      console.log(`📁 Downloaded baseline file path: ${downloadedBaselinePath}`);
-      const baselineBundleAnalysis = parseRsdoctorData(downloadedBaselinePath);
+      console.log(`📁 Downloaded baseline file path: ${baselineJsonPath}`);
+      const baselineBundleAnalysis = parseRsdoctorData(baselineJsonPath);
       if (baselineBundleAnalysis) {
         report.baseline = baselineBundleAnalysis;
         console.log(`✅ Successfully downloaded and parsed baseline for ${projectName}`);
@@ -167,14 +167,11 @@ async function processSingleFile(
   }
   
   // Generate rsdoctor HTML diff if baseline exists
-  if (report.baseline && targetCommitHash) {
+  if (report.baseline && baselineJsonPath) {
     try {
       const tempOutDir = process.cwd();
       const targetArtifactName = `${pathParts.join('-')}-${fileNameWithoutExt}-${targetCommitHash}${fileExt}`;
-      console.log(`🔍 Looking for target artifact: ${targetArtifactName}`);
-      
-      const downloadResult = await downloadArtifactByCommitHash(targetCommitHash, fileName);
-      const baselineJsonPath = path.join(downloadResult.downloadPath, fileName);
+      console.log(`🔍 Looking for target artifact: ${pathParts.join('-')}-${fileNameWithoutExt}-${targetCommitHash}${fileExt}`);
       
       try {
         const cliEntry = require.resolve('@rsdoctor/cli', { paths: [process.cwd()] });
@@ -200,13 +197,11 @@ async function processSingleFile(
       }
 
       const diffHtmlPath = path.join(tempOutDir, `rsdoctor-diff-${projectName}.html`);
-      // Try to rename if default name exists
       const defaultDiffPath = path.join(tempOutDir, 'rsdoctor-diff.html');
       if (fs.existsSync(defaultDiffPath)) {
         try {
           await fs.promises.rename(defaultDiffPath, diffHtmlPath);
         } catch (e) {
-          // If rename fails, just use default path
           report.diffHtmlPath = defaultDiffPath;
         }
       }
@@ -243,7 +238,6 @@ async function processSingleFile(
       throw new Error('file_path is required');
     }
     
-    // Support glob patterns for monorepo
     const matchedFiles = await fg(filePathPattern, {
       cwd: process.cwd(),
       absolute: true,
@@ -274,13 +268,15 @@ async function processSingleFile(
       }
     }
     
-    // Process all matched files
+    const isMerge = isMergeEvent();
+    const isPR = isPullRequestEvent();
+    
     const projectReports: ProjectReport[] = [];
     
-    for (const fullPath of matchedFiles) {
-      if (isMergeEvent()) {
-        console.log('🔄 Detected merge event - uploading current branch artifact');
-        
+    if (isMerge) {
+      console.log('🔄 Detected merge event - uploading current branch artifacts');
+      
+      for (const fullPath of matchedFiles) {
         const uploadResponse = await uploadArtifact(fullPath, currentCommitHash);
         
         if (typeof uploadResponse.id !== 'number') {
@@ -289,42 +285,90 @@ async function processSingleFile(
           console.log(`✅ Successfully uploaded artifact with ID: ${uploadResponse.id}`);
         }
         
+        // Collect project data for combined summary
         const currentBundleAnalysis = parseRsdoctorData(fullPath);
         if (currentBundleAnalysis) {
-          await generateBundleAnalysisReport(currentBundleAnalysis);
+          const projectName = extractProjectName(fullPath);
+          const relativePath = path.relative(process.cwd(), fullPath);
+          projectReports.push({
+            projectName,
+            filePath: relativePath,
+            current: currentBundleAnalysis,
+            baseline: null
+          });
         } else {
           const currentSizeData = loadSizeData(fullPath);
           if (currentSizeData) {
+            // For size data, still generate individual report as it's simpler
             await generateSizeReport(currentSizeData);
           }
         }
-        
-      } else if (isPullRequestEvent()) {
-        console.log('📥 Detected pull request event - processing files');
-        
-        // Process single file and collect report
-        const report = await processSingleFile(fullPath, currentCommitHash, targetCommitHash, githubService);
+      }
+      
+      // Generate combined summary for all projects in merge event
+      if (projectReports.length > 0) {
+        if (projectReports.length === 1) {
+          // Single project: use existing report format
+          const report = projectReports[0];
+          if (report.current) {
+            await generateBundleAnalysisReport(report.current);
+          }
+        } else {
+          await summary.addHeading('📦 Monorepo Bundle Analysis', 2);
+          
+          for (const report of projectReports) {
+            if (!report.current) continue;
+            
+            await summary.addHeading(`📁 ${report.projectName}`, 3);
+            await summary.addRaw(`**Path:** \`${report.filePath}\``);
+            await generateBundleAnalysisReport(report.current, undefined, false);
+          }
+          
+          await summary.write();
+        }
+      }
+      
+    } else if (isPR) {
+      console.log('📥 Detected pull request event - processing files');
+      
+      for (const fullPath of matchedFiles) {
+        const report = await processSingleFile(fullPath, currentCommitHash, targetCommitHash);
         projectReports.push(report);
-        
-        // Generate report for summary
-        if (report.current) {
-          await generateBundleAnalysisReport(report.current, report.baseline || undefined);
+      }
+      
+      if (projectReports.length > 0) {
+        if (projectReports.length === 1) {
+          const report = projectReports[0];
+          if (report.current) {
+            await generateBundleAnalysisReport(report.current, report.baseline || undefined);
+          }
+        } else {
+          await summary.addHeading('📦 Monorepo Bundle Analysis', 2);
+          
+          for (const report of projectReports) {
+            if (!report.current) continue;
+            
+            await summary.addHeading(`📁 ${report.projectName}`, 3);
+            await summary.addRaw(`**Path:** \`${report.filePath}\``);
+
+            await generateBundleAnalysisReport(report.current, report.baseline || undefined, false);
+          }
+          
+          await summary.write();
         }
       }
     }
     
     // Generate combined PR comment for all projects
-    if (isPullRequestEvent() && projectReports.length > 0) {
+    if (isPR && projectReports.length > 0) {
       const { context } = require('@actions/github');
       
       let commentBody = '## Rsdoctor Bundle Diff Analysis\n\n';
       
-      // Add summary for multiple projects
       if (projectReports.length > 1) {
         commentBody += `Found ${projectReports.length} project(s) in monorepo.\n\n`;
       }
       
-      // Generate markdown for each project
       for (const report of projectReports) {
         if (!report.current) continue;
         
@@ -350,7 +394,7 @@ async function processSingleFile(
       }
     }
     
-    if (!isMergeEvent() && !isPullRequestEvent()) {
+    if (!isMerge && !isPR) {
       console.log('ℹ️ Skipping artifact operations - this action only runs on merge events and pull requests');
       console.log('Current event:', process.env.GITHUB_EVENT_NAME);
       return;

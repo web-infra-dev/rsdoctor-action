@@ -205,7 +205,11 @@ export function generateProjectMarkdown(
   return markdown;
 }
 
-export async function generateBundleAnalysisReport(current: BundleAnalysis, baseline?: BundleAnalysis): Promise<void> {
+export async function generateBundleAnalysisReport(
+  current: BundleAnalysis, 
+  baseline?: BundleAnalysis,
+  writeSummary: boolean = true
+): Promise<void> {
   if (!baseline) {
     await summary
       .addRaw('> ⚠️ **No baseline data found** - Unable to perform comparison analysis')
@@ -258,9 +262,12 @@ export async function generateBundleAnalysisReport(current: BundleAnalysis, base
     .addSeparator();
   
   await summary
-    .addSeparator()
+    .addSeparator();
   
-  await summary.write();
+  // Only write summary if explicitly requested (default true for backward compatibility)
+  if (writeSummary) {
+    await summary.write();
+  }
   
   console.log('✅ Bundle analysis report generated successfully');
 }

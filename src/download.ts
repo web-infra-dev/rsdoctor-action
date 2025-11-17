@@ -2,6 +2,7 @@ import path from 'path';
 import * as fs from 'fs';
 import { GitHubService } from './github';
 import * as yauzl from 'yauzl';
+import { hashPath } from './upload';
 
 export async function downloadArtifact(artifactId: number, fileName: string) {
   console.log(`📥 Downloading artifact ID: ${artifactId}`);
@@ -86,16 +87,52 @@ export async function downloadArtifact(artifactId: number, fileName: string) {
   }
 }
 
-export async function downloadArtifactByCommitHash(commitHash: string, fileName: string) {
+export async function downloadArtifactByCommitHash(
+  commitHash: string, 
+  fileName: string,
+  filePath?: string
+) {
   console.log(`🔍 Looking for artifact with commit hash: ${commitHash}`);
   
   const githubService = new GitHubService();
   
-  console.log(`📋 Searching for artifacts matching commit hash: ${commitHash}`);
-  const artifact = await githubService.findArtifactByNamePattern(commitHash);
+  let artifact;
+  
+  // If filePath is provided, calculate path hash and search for exact match
+  if (filePath) {
+    const relativePath = path.relative(process.cwd(), filePath);
+    const pathParts = relativePath.split(path.sep);
+    const fileNameWithoutExt = path.parse(fileName).name;
+    const fileExt = path.parse(fileName).ext;
+    const pathHash = hashPath(pathParts, fileNameWithoutExt);
+    const expectedArtifactName = `${pathHash}-${commitHash}${fileExt}`;
+    
+    console.log(`📋 Searching for artifact with path hash and commit hash: ${expectedArtifactName}`);
+    console.log(`   Path hash: ${pathHash}`);
+    console.log(`   File path: ${relativePath}`);
+    
+    // List all artifacts and find the exact match
+    const artifacts = await githubService.listArtifacts();
+    artifact = artifacts.artifacts.find((a: any) => a.name === expectedArtifactName);
+    
+    if (artifact) {
+      console.log(`✅ Found exact match: ${artifact.name} (ID: ${artifact.id})`);
+    } else {
+      console.log(`⚠️  Exact match not found, trying fallback search by commit hash only`);
+    }
+  }
+  
+  // Fallback: search by commit hash only (for backward compatibility)
+  if (!artifact) {
+    console.log(`📋 Searching for artifacts matching commit hash: ${commitHash}`);
+    artifact = await githubService.findArtifactByNamePattern(commitHash);
+  }
   
   if (!artifact) {
     console.log(`❌ No artifact found for commit hash: ${commitHash}`);
+    if (filePath) {
+      console.log(`   Also tried searching with path hash from: ${filePath}`);
+    }
     console.log(`💡 This might mean:`);
     console.log(`   - The target branch hasn't been built yet`);
     console.log(`   - The artifact name pattern doesn't match`);

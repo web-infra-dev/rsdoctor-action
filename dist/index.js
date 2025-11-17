@@ -91180,13 +91180,32 @@ var __webpack_exports__ = {};
             throw error;
         }
     }
-    async function downloadArtifactByCommitHash(commitHash, fileName) {
+    async function downloadArtifactByCommitHash(commitHash, fileName, filePath) {
         console.log(`🔍 Looking for artifact with commit hash: ${commitHash}`);
         const githubService = new GitHubService();
-        console.log(`📋 Searching for artifacts matching commit hash: ${commitHash}`);
-        const artifact = await githubService.findArtifactByNamePattern(commitHash);
+        let artifact;
+        if (filePath) {
+            const relativePath = external_path_default().relative(process.cwd(), filePath);
+            const pathParts = relativePath.split(external_path_default().sep);
+            const fileNameWithoutExt = external_path_default().parse(fileName).name;
+            const fileExt = external_path_default().parse(fileName).ext;
+            const pathHash = hashPath(pathParts, fileNameWithoutExt);
+            const expectedArtifactName = `${pathHash}-${commitHash}${fileExt}`;
+            console.log(`📋 Searching for artifact with path hash and commit hash: ${expectedArtifactName}`);
+            console.log(`   Path hash: ${pathHash}`);
+            console.log(`   File path: ${relativePath}`);
+            const artifacts = await githubService.listArtifacts();
+            artifact = artifacts.artifacts.find((a)=>a.name === expectedArtifactName);
+            if (artifact) console.log(`✅ Found exact match: ${artifact.name} (ID: ${artifact.id})`);
+            else console.log(`⚠️  Exact match not found, trying fallback search by commit hash only`);
+        }
+        if (!artifact) {
+            console.log(`📋 Searching for artifacts matching commit hash: ${commitHash}`);
+            artifact = await githubService.findArtifactByNamePattern(commitHash);
+        }
         if (!artifact) {
             console.log(`❌ No artifact found for commit hash: ${commitHash}`);
+            if (filePath) console.log(`   Also tried searching with path hash from: ${filePath}`);
             console.log(`💡 This might mean:`);
             console.log("   - The target branch hasn't been built yet");
             console.log("   - The artifact name pattern doesn't match");
@@ -91347,7 +91366,7 @@ var __webpack_exports__ = {};
         markdown += '\n';
         return markdown;
     }
-    async function generateBundleAnalysisReport(current, baseline) {
+    async function generateBundleAnalysisReport(current, baseline, writeSummary = true) {
         if (baseline) await core.summary.addSeparator();
         else await core.summary.addRaw('> ⚠️ **No baseline data found** - Unable to perform comparison analysis').addSeparator();
         const mainTable = [
@@ -91462,7 +91481,7 @@ var __webpack_exports__ = {};
         ];
         await core.summary.addTable(mainTable).addSeparator();
         await core.summary.addSeparator();
-        await core.summary.write();
+        if (writeSummary) await core.summary.write();
         console.log('✅ Bundle analysis report generated successfully');
     }
     async function generateSizeReport(current, baseline) {
@@ -91615,7 +91634,7 @@ var __webpack_exports__ = {};
         }
         return pathParts[0] || 'root';
     }
-    async function processSingleFile(fullPath, currentCommitHash, targetCommitHash, githubService) {
+    async function processSingleFile(fullPath, currentCommitHash, targetCommitHash) {
         const fileName = external_path_default().basename(fullPath);
         const relativePath = external_path_default().relative(process.cwd(), fullPath);
         const pathParts = relativePath.split(external_path_default().sep);
@@ -91636,12 +91655,13 @@ var __webpack_exports__ = {};
             return report;
         }
         report.current = currentBundleAnalysis;
+        let baselineJsonPath = null;
         if (targetCommitHash) try {
             console.log(`📥 Attempting to download baseline for ${projectName}...`);
-            const downloadResult = await downloadArtifactByCommitHash(targetCommitHash, fileName);
-            const downloadedBaselinePath = external_path_default().join(downloadResult.downloadPath, fileName);
-            console.log(`📁 Downloaded baseline file path: ${downloadedBaselinePath}`);
-            const baselineBundleAnalysis = parseRsdoctorData(downloadedBaselinePath);
+            const downloadResult = await downloadArtifactByCommitHash(targetCommitHash, fileName, fullPath);
+            baselineJsonPath = external_path_default().join(downloadResult.downloadPath, fileName);
+            console.log(`📁 Downloaded baseline file path: ${baselineJsonPath}`);
+            const baselineBundleAnalysis = parseRsdoctorData(baselineJsonPath);
             if (baselineBundleAnalysis) {
                 report.baseline = baselineBundleAnalysis;
                 console.log(`✅ Successfully downloaded and parsed baseline for ${projectName}`);
@@ -91650,12 +91670,10 @@ var __webpack_exports__ = {};
             console.log(`❌ Failed to download baseline for ${projectName}: ${downloadError}`);
             console.log(`ℹ️  No baseline data found for ${projectName}`);
         }
-        if (report.baseline && targetCommitHash) try {
+        if (report.baseline && baselineJsonPath) try {
             const tempOutDir = process.cwd();
-            const targetArtifactName = `${pathParts.join('-')}-${fileNameWithoutExt}-${targetCommitHash}${fileExt}`;
-            console.log(`🔍 Looking for target artifact: ${targetArtifactName}`);
-            const downloadResult = await downloadArtifactByCommitHash(targetCommitHash, fileName);
-            const baselineJsonPath = external_path_default().join(downloadResult.downloadPath, fileName);
+            pathParts.join('-');
+            console.log(`🔍 Looking for target artifact: ${pathParts.join('-')}-${fileNameWithoutExt}-${targetCommitHash}${fileExt}`);
             try {
                 const cliEntry = require.resolve('@rsdoctor/cli', {
                     paths: [
@@ -91733,25 +91751,62 @@ var __webpack_exports__ = {};
                 console.error(`❌ Failed to get target branch commit: ${error}`);
                 console.log('📝 No baseline data available for comparison');
             }
+            const isMerge = isMergeEvent();
+            const isPR = isPullRequestEvent();
             const projectReports = [];
-            for (const fullPath of matchedFiles)if (isMergeEvent()) {
-                console.log('🔄 Detected merge event - uploading current branch artifact');
-                const uploadResponse = await uploadArtifact(fullPath, currentCommitHash);
-                if ('number' != typeof uploadResponse.id) console.warn(`⚠️ Artifact upload failed for ${fullPath}`);
-                else console.log(`✅ Successfully uploaded artifact with ID: ${uploadResponse.id}`);
-                const currentBundleAnalysis = parseRsdoctorData(fullPath);
-                if (currentBundleAnalysis) await generateBundleAnalysisReport(currentBundleAnalysis);
-                else {
-                    const currentSizeData = loadSizeData(fullPath);
-                    if (currentSizeData) await generateSizeReport(currentSizeData);
+            if (isMerge) {
+                console.log('🔄 Detected merge event - uploading current branch artifacts');
+                for (const fullPath of matchedFiles){
+                    const uploadResponse = await uploadArtifact(fullPath, currentCommitHash);
+                    if ('number' != typeof uploadResponse.id) console.warn(`⚠️ Artifact upload failed for ${fullPath}`);
+                    else console.log(`✅ Successfully uploaded artifact with ID: ${uploadResponse.id}`);
+                    const currentBundleAnalysis = parseRsdoctorData(fullPath);
+                    if (currentBundleAnalysis) {
+                        const projectName = extractProjectName(fullPath);
+                        const relativePath = external_path_default().relative(process.cwd(), fullPath);
+                        projectReports.push({
+                            projectName,
+                            filePath: relativePath,
+                            current: currentBundleAnalysis,
+                            baseline: null
+                        });
+                    } else {
+                        const currentSizeData = loadSizeData(fullPath);
+                        if (currentSizeData) await generateSizeReport(currentSizeData);
+                    }
                 }
-            } else if (isPullRequestEvent()) {
+                if (projectReports.length > 0) if (1 === projectReports.length) {
+                    const report = projectReports[0];
+                    if (report.current) await generateBundleAnalysisReport(report.current);
+                } else {
+                    await core.summary.addHeading('📦 Monorepo Bundle Analysis', 2);
+                    for (const report of projectReports)if (report.current) {
+                        await core.summary.addHeading(`📁 ${report.projectName}`, 3);
+                        await core.summary.addRaw(`**Path:** \`${report.filePath}\``);
+                        await generateBundleAnalysisReport(report.current, void 0, false);
+                    }
+                    await core.summary.write();
+                }
+            } else if (isPR) {
                 console.log('📥 Detected pull request event - processing files');
-                const report = await processSingleFile(fullPath, currentCommitHash, targetCommitHash, githubService);
-                projectReports.push(report);
-                if (report.current) await generateBundleAnalysisReport(report.current, report.baseline || void 0);
+                for (const fullPath of matchedFiles){
+                    const report = await processSingleFile(fullPath, currentCommitHash, targetCommitHash);
+                    projectReports.push(report);
+                }
+                if (projectReports.length > 0) if (1 === projectReports.length) {
+                    const report = projectReports[0];
+                    if (report.current) await generateBundleAnalysisReport(report.current, report.baseline || void 0);
+                } else {
+                    await core.summary.addHeading('📦 Monorepo Bundle Analysis', 2);
+                    for (const report of projectReports)if (report.current) {
+                        await core.summary.addHeading(`📁 ${report.projectName}`, 3);
+                        await core.summary.addRaw(`**Path:** \`${report.filePath}\``);
+                        await generateBundleAnalysisReport(report.current, report.baseline || void 0, false);
+                    }
+                    await core.summary.write();
+                }
             }
-            if (isPullRequestEvent() && projectReports.length > 0) {
+            if (isPR && projectReports.length > 0) {
                 const { context } = __webpack_require__("./node_modules/.pnpm/@actions+github@4.0.0/node_modules/@actions/github/lib/github.js");
                 let commentBody = '## Rsdoctor Bundle Diff Analysis\n\n';
                 if (projectReports.length > 1) commentBody += `Found ${projectReports.length} project(s) in monorepo.\n\n`;
@@ -91770,7 +91825,7 @@ var __webpack_exports__ = {};
                     console.warn(`⚠️ Failed to add/update comment to PR: ${commentError}`);
                 }
             }
-            if (!isMergeEvent() && !isPullRequestEvent()) {
+            if (!isMerge && !isPR) {
                 console.log('ℹ️ Skipping artifact operations - this action only runs on merge events and pull requests');
                 console.log('Current event:', process.env.GITHUB_EVENT_NAME);
                 return;
