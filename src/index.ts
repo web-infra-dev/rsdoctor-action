@@ -84,26 +84,32 @@ interface ProjectReport {
   diffHtmlArtifactId?: number;
 }
 
-/**
- * Extract project name from file path for display
- */
 function extractProjectName(filePath: string): string {
   const relativePath = path.relative(process.cwd(), filePath);
   const pathParts = relativePath.split(path.sep);
   
-  // Try to identify sub-project name from common monorepo patterns
-  const monorepoPatterns = ['packages', 'apps', 'projects', 'libs', 'modules'];
+  const buildOutputDirs = ['dist', '.rsdoctor', 'output', '.next', 'public'];
+  
+  const monorepoPatterns = ['packages', 'apps', 'projects', 'libs', 'modules', 'examples'];
   const patternIndex = pathParts.findIndex(part => monorepoPatterns.includes(part));
   
   if (patternIndex >= 0 && patternIndex + 1 < pathParts.length) {
-    return pathParts[patternIndex + 1];
+    for (let i = patternIndex + 1; i < pathParts.length; i++) {
+      const part = pathParts[i];
+      if (!buildOutputDirs.includes(part)) {
+        return part;
+      }
+    }
   }
   
-  // Fallback: use directory name containing the file
-  if (pathParts.length > 1) {
-    return pathParts[pathParts.length - 2];
+  for (let i = pathParts.length - 2; i >= 0; i--) {
+    const part = pathParts[i];
+    if (!buildOutputDirs.includes(part)) {
+      return part;
+    }
   }
   
+  // Last resort: use first meaningful part
   return pathParts[0] || 'root';
 }
 

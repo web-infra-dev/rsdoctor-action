@@ -91589,16 +91589,30 @@ var __webpack_exports__ = {};
     function extractProjectName(filePath) {
         const relativePath = external_path_default().relative(process.cwd(), filePath);
         const pathParts = relativePath.split(external_path_default().sep);
+        const buildOutputDirs = [
+            'dist',
+            '.rsdoctor',
+            'output',
+            '.next',
+            'public'
+        ];
         const monorepoPatterns = [
             'packages',
             'apps',
             'projects',
             'libs',
-            'modules'
+            'modules',
+            'examples'
         ];
         const patternIndex = pathParts.findIndex((part)=>monorepoPatterns.includes(part));
-        if (patternIndex >= 0 && patternIndex + 1 < pathParts.length) return pathParts[patternIndex + 1];
-        if (pathParts.length > 1) return pathParts[pathParts.length - 2];
+        if (patternIndex >= 0 && patternIndex + 1 < pathParts.length) for(let i = patternIndex + 1; i < pathParts.length; i++){
+            const part = pathParts[i];
+            if (!buildOutputDirs.includes(part)) return part;
+        }
+        for(let i = pathParts.length - 2; i >= 0; i--){
+            const part = pathParts[i];
+            if (!buildOutputDirs.includes(part)) return part;
+        }
         return pathParts[0] || 'root';
     }
     async function processSingleFile(fullPath, currentCommitHash, targetCommitHash, githubService) {
