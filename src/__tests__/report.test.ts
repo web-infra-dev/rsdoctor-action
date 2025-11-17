@@ -1,7 +1,7 @@
 import * as path from 'path';
 import {
   parseRsdoctorData,
-  generateBundleAnalysisMarkdown,
+  generateProjectMarkdown,
   generateBundleAnalysisReport,
 } from '../report';
 import { describe, it, expect } from '@rstest/core';
@@ -27,7 +27,7 @@ describe('Report Module', () => {
     });
   });
 
-  describe('generateBundleAnalysisMarkdown', () => {
+  describe('generateProjectMarkdown', () => {
     const mockAnalysis = {
       totalSize: 1024 * 1024, // 1MB
       jsSize: 512 * 1024,     // 512KB
@@ -39,9 +39,12 @@ describe('Report Module', () => {
     };
 
     it('should generate markdown without baseline', () => {
-      const markdown = generateBundleAnalysisMarkdown(mockAnalysis);
+      const markdown = generateProjectMarkdown('test-project', 'path/to/file.json', mockAnalysis);
+      expect(markdown).toContain('### 📁 test-project');
+      expect(markdown).toContain('**Path:** `path/to/file.json`');
       expect(markdown).toContain('1.0 MB');
       expect(markdown).toContain('512.0 KB');
+      expect(markdown).toContain('⚠️ **No baseline data found**');
       expect(markdown).toMatchSnapshot();
     });
 
@@ -50,8 +53,17 @@ describe('Report Module', () => {
         ...mockAnalysis,
         totalSize: 512 * 1024, // 512KB (smaller)
       };
-      const markdown = generateBundleAnalysisMarkdown(mockAnalysis, baseline);
+      const markdown = generateProjectMarkdown('test-project', 'path/to/file.json', mockAnalysis, baseline);
+      expect(markdown).toContain('### 📁 test-project');
+      expect(markdown).toContain('**Path:** `path/to/file.json`');
       expect(markdown).toContain('+512.0 KB');
+      expect(markdown).not.toContain('⚠️ **No baseline data found**');
+    });
+
+    it('should include project name in title', () => {
+      const markdown = generateProjectMarkdown('my-app', 'packages/my-app/dist/.rsdoctor/rsdoctor-data.json', mockAnalysis);
+      expect(markdown).toContain('### 📁 my-app');
+      expect(markdown).toContain('packages/my-app/dist/.rsdoctor/rsdoctor-data.json');
     });
   });
 

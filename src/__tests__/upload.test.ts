@@ -1,6 +1,6 @@
 import * as path from 'path';
 const mockFs = require('mock-fs');
-import { uploadArtifact } from '../upload';
+import { uploadArtifact, hashPath } from '../upload';
 import { mockConsole, restoreConsole } from './mock-console';
 import { describe, beforeEach, rstest, afterEach, it, expect } from '@rstest/core';
 
@@ -53,6 +53,40 @@ describe('Upload Module', () => {
     const result = await uploadArtifact(mockFilePath, mockCommitHash);
     expect(result).toBeDefined();
     expect(result.id).toBe(1);
+  });
+
+  describe('hashPath', () => {
+    it('should generate consistent hash for same path', () => {
+      const pathParts1 = ['packages', 'app1', 'dist', '.rsdoctor'];
+      const fileName1 = 'rsdoctor-data';
+      const hash1 = hashPath(pathParts1, fileName1);
+      
+      const hash2 = hashPath(pathParts1, fileName1);
+      expect(hash1).toBe(hash2);
+      expect(hash1).toHaveLength(8);
+    });
+
+    it('should generate different hash for different paths', () => {
+      const pathParts1 = ['packages', 'app1', 'dist', '.rsdoctor'];
+      const pathParts2 = ['packages', 'app2', 'dist', '.rsdoctor'];
+      const fileName = 'rsdoctor-data';
+      
+      const hash1 = hashPath(pathParts1, fileName);
+      const hash2 = hashPath(pathParts2, fileName);
+      
+      expect(hash1).not.toBe(hash2);
+    });
+
+    it('should generate different hash for different file names', () => {
+      const pathParts = ['packages', 'app1', 'dist', '.rsdoctor'];
+      const fileName1 = 'rsdoctor-data';
+      const fileName2 = 'other-data';
+      
+      const hash1 = hashPath(pathParts, fileName1);
+      const hash2 = hashPath(pathParts, fileName2);
+      
+      expect(hash1).not.toBe(hash2);
+    });
   });
 });
 

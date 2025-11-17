@@ -1,7 +1,11 @@
 // Rstest Snapshot v1
 
-exports[`Report Module > generateBundleAnalysisMarkdown > should generate markdown without baseline 1`] = `
-"> ⚠️ **No baseline data found** - Unable to perform comparison analysis
+exports[`Report Module > generateProjectMarkdown > should generate markdown without baseline 1`] = `
+"### 📁 test-project
+
+**Path:** \`path/to/file.json\`
+
+> ⚠️ **No baseline data found** - Unable to perform comparison analysis
 
 | Metric | Current | Baseline | Change |
 |--------|---------|----------|--------|
@@ -10,5 +14,6 @@ exports[`Report Module > generateBundleAnalysisMarkdown > should generate markdo
 | 🎨 CSS | 256.0 KB | - | - |
 | 🌐 HTML | 128.0 KB | - | - |
 | 📁 Other Assets | 128.0 KB | - | - |
+
 "
 `;
