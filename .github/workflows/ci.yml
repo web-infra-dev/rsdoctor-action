@@ -56,7 +56,7 @@ jobs:
           cd examples/rsbuild-demo
           pnpm install
           pnpm run build
-          cd ../examples/rsbuild-demo2
+          cd ../rsbuild-demo2
           pnpm run build
           
       - name: Report Compressed Size
