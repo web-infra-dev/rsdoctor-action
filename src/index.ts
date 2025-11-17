@@ -162,7 +162,9 @@ async function processSingleFile(
       }
     } catch (downloadError) {
       console.log(`❌ Failed to download baseline for ${projectName}: ${downloadError}`);
-      console.log(`ℹ️  No baseline data found for ${projectName}`);
+      console.log(`ℹ️  No baseline data found for ${projectName} - skipping bundle diff for this project`);
+      // Don't set baseline, so bundle diff won't be generated
+      baselineJsonPath = null;
     }
   }
   

@@ -91181,38 +91181,30 @@ var __webpack_exports__ = {};
         }
     }
     async function downloadArtifactByCommitHash(commitHash, fileName, filePath) {
+        if (!filePath) throw new Error('filePath is required for artifact download');
         console.log(`🔍 Looking for artifact with commit hash: ${commitHash}`);
         const githubService = new GitHubService();
-        let artifact;
-        if (filePath) {
-            const relativePath = external_path_default().relative(process.cwd(), filePath);
-            const pathParts = relativePath.split(external_path_default().sep);
-            const fileNameWithoutExt = external_path_default().parse(fileName).name;
-            const fileExt = external_path_default().parse(fileName).ext;
-            const pathHash = hashPath(pathParts, fileNameWithoutExt);
-            const expectedArtifactName = `${pathHash}-${commitHash}${fileExt}`;
-            console.log(`📋 Searching for artifact with path hash and commit hash: ${expectedArtifactName}`);
-            console.log(`   Path hash: ${pathHash}`);
-            console.log(`   File path: ${relativePath}`);
-            const artifacts = await githubService.listArtifacts();
-            artifact = artifacts.artifacts.find((a)=>a.name === expectedArtifactName);
-            if (artifact) console.log(`✅ Found exact match: ${artifact.name} (ID: ${artifact.id})`);
-            else console.log(`⚠️  Exact match not found, trying fallback search by commit hash only`);
-        }
+        const relativePath = external_path_default().relative(process.cwd(), filePath);
+        const pathParts = relativePath.split(external_path_default().sep);
+        const fileNameWithoutExt = external_path_default().parse(fileName).name;
+        const fileExt = external_path_default().parse(fileName).ext;
+        const pathHash = hashPath(pathParts, fileNameWithoutExt);
+        const expectedArtifactName = `${pathHash}-${commitHash}${fileExt}`;
+        console.log(`📋 Searching for artifact with path hash and commit hash: ${expectedArtifactName}`);
+        console.log(`   Path hash: ${pathHash}`);
+        console.log(`   File path: ${relativePath}`);
+        const artifacts = await githubService.listArtifacts();
+        const artifact = artifacts.artifacts.find((a)=>a.name === expectedArtifactName);
         if (!artifact) {
-            console.log(`📋 Searching for artifacts matching commit hash: ${commitHash}`);
-            artifact = await githubService.findArtifactByNamePattern(commitHash);
-        }
-        if (!artifact) {
-            console.log(`❌ No artifact found for commit hash: ${commitHash}`);
-            if (filePath) console.log(`   Also tried searching with path hash from: ${filePath}`);
+            console.log(`❌ No artifact found matching: ${expectedArtifactName}`);
+            console.log(`   Available artifacts: ${artifacts.artifacts.map((a)=>a.name).join(', ')}`);
             console.log(`💡 This might mean:`);
             console.log("   - The target branch hasn't been built yet");
             console.log("   - The artifact name pattern doesn't match");
             console.log("   - The artifact has expired (GitHub artifacts expire after 90 days)");
-            throw new Error(`No artifact found for commit hash: ${commitHash}`);
+            throw new Error(`No artifact found matching: ${expectedArtifactName}`);
         }
-        console.log(`✅ Found artifact: ${artifact.name} (ID: ${artifact.id})`);
+        console.log(`✅ Found exact match: ${artifact.name} (ID: ${artifact.id})`);
         try {
             const artifacts = await githubService.listArtifacts();
             const artifactDetails = artifacts.artifacts.find((a)=>a.id === artifact.id);
@@ -91668,7 +91660,8 @@ var __webpack_exports__ = {};
             }
         } catch (downloadError) {
             console.log(`❌ Failed to download baseline for ${projectName}: ${downloadError}`);
-            console.log(`ℹ️  No baseline data found for ${projectName}`);
+            console.log(`ℹ️  No baseline data found for ${projectName} - skipping bundle diff for this project`);
+            baselineJsonPath = null;
         }
         if (report.baseline && baselineJsonPath) try {
             const tempOutDir = process.cwd();
