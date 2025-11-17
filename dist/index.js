@@ -91333,8 +91333,9 @@ var __webpack_exports__ = {};
             emoji: '📉'
         };
     }
-    function generateBundleAnalysisMarkdown(current, baseline) {
-        let markdown = '';
+    function generateProjectMarkdown(projectName, filePath, current, baseline) {
+        let markdown = `### 📁 ${projectName}\n\n`;
+        markdown += `**Path:** \`${filePath}\`\n\n`;
         if (!baseline) markdown += '> ⚠️ **No baseline data found** - Unable to perform comparison analysis\n\n';
         markdown += '| Metric | Current | Baseline | Change |\n';
         markdown += '|--------|---------|----------|--------|\n';
@@ -91343,6 +91344,7 @@ var __webpack_exports__ = {};
         markdown += `| 🎨 CSS | ${formatBytes(current.cssSize)} | ${baseline ? formatBytes(baseline.cssSize) : '-'} | ${baseline ? calculateDiff(current.cssSize, baseline.cssSize).value : '-'} |\n`;
         markdown += `| 🌐 HTML | ${formatBytes(current.htmlSize)} | ${baseline ? formatBytes(baseline.htmlSize) : '-'} | ${baseline ? calculateDiff(current.htmlSize, baseline.htmlSize).value : '-'} |\n`;
         markdown += `| 📁 Other Assets | ${formatBytes(current.otherSize)} | ${baseline ? formatBytes(baseline.otherSize) : '-'} | ${baseline ? calculateDiff(current.otherSize, baseline.otherSize).value : '-'} |\n`;
+        markdown += '\n';
         return markdown;
     }
     async function generateBundleAnalysisReport(current, baseline) {
@@ -91526,6 +91528,8 @@ var __webpack_exports__ = {};
         console.log('✅ Bundle size report card generated successfully');
     }
     var external_util_ = __webpack_require__("util");
+    const external_fast_glob_namespaceObject = require("fast-glob");
+    var external_fast_glob_default = /*#__PURE__*/ __webpack_require__.n(external_fast_glob_namespaceObject);
     const execFileAsync = (0, external_util_.promisify)(external_child_process_.execFile);
     function isMergeEvent() {
         const { context } = __webpack_require__("./node_modules/.pnpm/@actions+github@4.0.0/node_modules/@actions/github/lib/github.js");
@@ -91582,28 +91586,145 @@ var __webpack_exports__ = {};
         if (r.error) throw r.error;
         if (0 !== r.status) throw new Error(`rsdoctor exited with code ${r.status}`);
     }
+    function extractProjectName(filePath) {
+        const relativePath = external_path_default().relative(process.cwd(), filePath);
+        const pathParts = relativePath.split(external_path_default().sep);
+        const monorepoPatterns = [
+            'packages',
+            'apps',
+            'projects',
+            'libs',
+            'modules'
+        ];
+        const patternIndex = pathParts.findIndex((part)=>monorepoPatterns.includes(part));
+        if (patternIndex >= 0 && patternIndex + 1 < pathParts.length) return pathParts[patternIndex + 1];
+        if (pathParts.length > 1) return pathParts[pathParts.length - 2];
+        return pathParts[0] || 'root';
+    }
+    async function processSingleFile(fullPath, currentCommitHash, targetCommitHash, githubService) {
+        const fileName = external_path_default().basename(fullPath);
+        const relativePath = external_path_default().relative(process.cwd(), fullPath);
+        const pathParts = relativePath.split(external_path_default().sep);
+        const fileNameWithoutExt = external_path_default().parse(fileName).name;
+        const fileExt = external_path_default().parse(fileName).ext;
+        const projectName = extractProjectName(fullPath);
+        console.log(`\n📦 Processing project: ${projectName}`);
+        console.log(`   File: ${relativePath}`);
+        const report = {
+            projectName,
+            filePath: relativePath,
+            current: null,
+            baseline: null
+        };
+        const currentBundleAnalysis = parseRsdoctorData(fullPath);
+        if (!currentBundleAnalysis) {
+            console.warn(`⚠️ Failed to parse rsdoctor data from ${fullPath}, skipping...`);
+            return report;
+        }
+        report.current = currentBundleAnalysis;
+        if (targetCommitHash) try {
+            console.log(`📥 Attempting to download baseline for ${projectName}...`);
+            const downloadResult = await downloadArtifactByCommitHash(targetCommitHash, fileName);
+            const downloadedBaselinePath = external_path_default().join(downloadResult.downloadPath, fileName);
+            console.log(`📁 Downloaded baseline file path: ${downloadedBaselinePath}`);
+            const baselineBundleAnalysis = parseRsdoctorData(downloadedBaselinePath);
+            if (baselineBundleAnalysis) {
+                report.baseline = baselineBundleAnalysis;
+                console.log(`✅ Successfully downloaded and parsed baseline for ${projectName}`);
+            }
+        } catch (downloadError) {
+            console.log(`❌ Failed to download baseline for ${projectName}: ${downloadError}`);
+            console.log(`ℹ️  No baseline data found for ${projectName}`);
+        }
+        if (report.baseline && targetCommitHash) try {
+            const tempOutDir = process.cwd();
+            const targetArtifactName = `${pathParts.join('-')}-${fileNameWithoutExt}-${targetCommitHash}${fileExt}`;
+            console.log(`🔍 Looking for target artifact: ${targetArtifactName}`);
+            const downloadResult = await downloadArtifactByCommitHash(targetCommitHash, fileName);
+            const baselineJsonPath = external_path_default().join(downloadResult.downloadPath, fileName);
+            try {
+                const cliEntry = require.resolve('@rsdoctor/cli', {
+                    paths: [
+                        process.cwd()
+                    ]
+                });
+                const binCliEntry = external_path_default().join(external_path_default().dirname(external_path_default().dirname(cliEntry)), 'bin', 'rsdoctor');
+                console.log(`🔍 Found rsdoctor CLI at: ${binCliEntry}`);
+                runRsdoctorViaNode(binCliEntry, [
+                    'bundle-diff',
+                    '--html',
+                    `--baseline=${baselineJsonPath}`,
+                    `--current=${fullPath}`
+                ]);
+            } catch (e) {
+                console.log(`⚠️ rsdoctor CLI not found in node_modules: ${e}`);
+                try {
+                    const shellCmd = `npx @rsdoctor/cli bundle-diff --html --baseline="${baselineJsonPath}" --current="${fullPath}"`;
+                    console.log(`🛠️ Running rsdoctor via npx: ${shellCmd}`);
+                    await execFileAsync('sh', [
+                        '-c',
+                        shellCmd
+                    ], {
+                        cwd: tempOutDir
+                    });
+                } catch (npxError) {
+                    console.log(`⚠️ npx approach also failed: ${npxError}`);
+                }
+            }
+            const diffHtmlPath = external_path_default().join(tempOutDir, `rsdoctor-diff-${projectName}.html`);
+            const defaultDiffPath = external_path_default().join(tempOutDir, 'rsdoctor-diff.html');
+            if (external_fs_.existsSync(defaultDiffPath)) try {
+                await external_fs_.promises.rename(defaultDiffPath, diffHtmlPath);
+            } catch (e) {
+                report.diffHtmlPath = defaultDiffPath;
+            }
+            if (!report.diffHtmlPath) report.diffHtmlPath = external_fs_.existsSync(diffHtmlPath) ? diffHtmlPath : defaultDiffPath;
+            if (external_fs_.existsSync(report.diffHtmlPath)) try {
+                const uploadRes = await uploadArtifact(report.diffHtmlPath, currentCommitHash);
+                if ('number' == typeof uploadRes.id) {
+                    report.diffHtmlArtifactId = uploadRes.id;
+                    console.log(`✅ Uploaded bundle diff HTML for ${projectName}, artifact id: ${uploadRes.id}`);
+                }
+            } catch (e) {
+                console.warn(`⚠️ Failed to upload diff html for ${projectName}: ${e}`);
+            }
+        } catch (e) {
+            console.warn(`⚠️ rsdoctor bundle-diff failed for ${projectName}: ${e}`);
+        }
+        return report;
+    }
     (async ()=>{
         try {
             const githubService = new GitHubService();
-            const filePath = (0, core.getInput)('file_path');
-            if (!filePath) throw new Error('file_path is required');
-            const fullPath = external_path_default().resolve(process.cwd(), filePath);
-            console.log(`Full path: ${fullPath}`);
-            const fileName = external_path_default().basename(filePath);
-            const relativePath = external_path_default().relative(process.cwd(), fullPath);
-            const pathParts = relativePath.split(external_path_default().sep);
-            const fileNameWithoutExt = external_path_default().parse(fileName).name;
-            const fileExt = external_path_default().parse(fileName).ext;
+            const filePathPattern = (0, core.getInput)('file_path');
+            if (!filePathPattern) throw new Error('file_path is required');
+            const matchedFiles = await external_fast_glob_default()(filePathPattern, {
+                cwd: process.cwd(),
+                absolute: true,
+                onlyFiles: true
+            });
+            if (0 === matchedFiles.length) throw new Error(`No files found matching pattern: ${filePathPattern}`);
+            console.log(`📁 Found ${matchedFiles.length} file(s) matching pattern: ${filePathPattern}`);
+            matchedFiles.forEach((file, index)=>{
+                console.log(`  ${index + 1}. ${file}`);
+            });
             const currentCommitHash = githubService.getCurrentCommitHash();
             console.log(`Current commit hash: ${currentCommitHash}`);
-            const pathHash = hashPath(pathParts, fileNameWithoutExt);
-            const artifactNamePattern = `${pathHash}-`;
-            console.log(`Artifact name pattern: ${artifactNamePattern}`);
-            if (isMergeEvent()) {
-                console.log('🔄 Detected merge event - uploading current branch artifact only');
+            let targetCommitHash = null;
+            if (isPullRequestEvent()) try {
+                console.log('🔍 Getting target branch commit hash...');
+                targetCommitHash = await githubService.getTargetBranchLatestCommit();
+                console.log(`✅ Target branch commit hash: ${targetCommitHash}`);
+            } catch (error) {
+                console.error(`❌ Failed to get target branch commit: ${error}`);
+                console.log('📝 No baseline data available for comparison');
+            }
+            const projectReports = [];
+            for (const fullPath of matchedFiles)if (isMergeEvent()) {
+                console.log('🔄 Detected merge event - uploading current branch artifact');
                 const uploadResponse = await uploadArtifact(fullPath, currentCommitHash);
-                if ('number' != typeof uploadResponse.id) throw new Error('Artifact upload failed: No artifact ID returned.');
-                console.log(`✅ Successfully uploaded artifact with ID: ${uploadResponse.id}`);
+                if ('number' != typeof uploadResponse.id) console.warn(`⚠️ Artifact upload failed for ${fullPath}`);
+                else console.log(`✅ Successfully uploaded artifact with ID: ${uploadResponse.id}`);
                 const currentBundleAnalysis = parseRsdoctorData(fullPath);
                 if (currentBundleAnalysis) await generateBundleAnalysisReport(currentBundleAnalysis);
                 else {
@@ -91611,122 +91732,31 @@ var __webpack_exports__ = {};
                     if (currentSizeData) await generateSizeReport(currentSizeData);
                 }
             } else if (isPullRequestEvent()) {
-                console.log('📥 Detected pull request event - downloading target branch artifact if exists');
-                const currentBundleAnalysis = parseRsdoctorData(fullPath);
-                if (!currentBundleAnalysis) throw new Error(`Failed to load current bundle analysis from: ${fullPath}`);
-                let baselineBundleAnalysis = null;
-                let baselineJsonPath = null;
+                console.log('📥 Detected pull request event - processing files');
+                const report = await processSingleFile(fullPath, currentCommitHash, targetCommitHash, githubService);
+                projectReports.push(report);
+                if (report.current) await generateBundleAnalysisReport(report.current, report.baseline || void 0);
+            }
+            if (isPullRequestEvent() && projectReports.length > 0) {
+                const { context } = __webpack_require__("./node_modules/.pnpm/@actions+github@4.0.0/node_modules/@actions/github/lib/github.js");
+                let commentBody = '## Rsdoctor Bundle Diff Analysis\n\n';
+                if (projectReports.length > 1) commentBody += `Found ${projectReports.length} project(s) in monorepo.\n\n`;
+                for (const report of projectReports)if (report.current) {
+                    commentBody += generateProjectMarkdown(report.projectName, report.filePath, report.current, report.baseline || void 0);
+                    if (report.diffHtmlArtifactId) {
+                        const artifactDownloadLink = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}/artifacts/${report.diffHtmlArtifactId}`;
+                        commentBody += `\n📦 **Download Diff Report**: [${report.projectName} Bundle Diff](${artifactDownloadLink})\n\n`;
+                    }
+                }
+                commentBody += '*Generated by Rsdoctor Action*';
                 try {
-                    console.log('🔍 Getting target branch commit hash...');
-                    const targetCommitHash = await githubService.getTargetBranchLatestCommit();
-                    console.log(`✅ Target branch commit hash: ${targetCommitHash}`);
-                    const targetArtifactName = `${pathHash}-${targetCommitHash}${fileExt}`;
-                    console.log(`🔍 Looking for target artifact: ${targetArtifactName}`);
-                    try {
-                        console.log('📥 Attempting to download target branch artifact...');
-                        const downloadResult = await downloadArtifactByCommitHash(targetCommitHash, fileName);
-                        const downloadedBaselinePath = external_path_default().join(downloadResult.downloadPath, fileName);
-                        baselineJsonPath = downloadedBaselinePath;
-                        console.log(`📁 Downloaded baseline file path: ${downloadedBaselinePath}`);
-                        console.log(`📊 Parsing baseline rsdoctor data...`);
-                        baselineBundleAnalysis = parseRsdoctorData(downloadedBaselinePath);
-                        if (!baselineBundleAnalysis) throw new Error('Failed to parse baseline rsdoctor data');
-                        console.log('✅ Successfully downloaded and parsed target branch artifact');
-                    } catch (downloadError) {
-                        console.log(`❌ Failed to download target branch artifact: ${downloadError}`);
-                        console.log('ℹ️  No baseline data found - target branch artifact does not exist');
-                        console.log('📝 No baseline data available for comparison');
-                        baselineBundleAnalysis = null;
-                    }
-                } catch (error) {
-                    console.error(`❌ Failed to get target branch commit: ${error}`);
-                    console.log('📝 No baseline data available for comparison');
-                    baselineBundleAnalysis = null;
+                    await githubService.updateOrCreateComment(context.payload.pull_request.number, commentBody);
+                    console.log('✅ Added/updated bundle diff comment to PR');
+                } catch (commentError) {
+                    console.warn(`⚠️ Failed to add/update comment to PR: ${commentError}`);
                 }
-                try {
-                    if (baselineJsonPath) {
-                        const tempOutDir = process.cwd();
-                        try {
-                            const cliEntry = require.resolve('@rsdoctor/cli', {
-                                paths: [
-                                    process.cwd()
-                                ]
-                            });
-                            const binCliEntry = external_path_default().join(external_path_default().dirname(external_path_default().dirname(cliEntry)), 'bin', 'rsdoctor');
-                            console.log(`🔍 Found rsdoctor CLI at: ${binCliEntry}`);
-                            runRsdoctorViaNode(binCliEntry, [
-                                'bundle-diff',
-                                '--html',
-                                `--baseline=${baselineJsonPath}`,
-                                `--current=${fullPath}`
-                            ]);
-                        } catch (e) {
-                            console.log(`⚠️ rsdoctor CLI not found in node_modules: ${e}`);
-                            try {
-                                const shellCmd = `npx @rsdoctor/cli bundle-diff --html --baseline="${baselineJsonPath}" --current="${fullPath}"`;
-                                console.log(`🛠️ Running rsdoctor via npx: ${shellCmd}`);
-                                await execFileAsync('sh', [
-                                    '-c',
-                                    shellCmd
-                                ], {
-                                    cwd: tempOutDir
-                                });
-                            } catch (npxError) {
-                                console.log(`⚠️ npx approach also failed: ${npxError}`);
-                                throw new Error(`Failed to run rsdoctor: ${npxError.message}`);
-                            }
-                        }
-                        const diffHtmlPath = external_path_default().join(tempOutDir, 'rsdoctor-diff.html');
-                        try {
-                            const uploadRes = await uploadArtifact(diffHtmlPath, currentCommitHash);
-                            console.log(`✅ Uploaded bundle diff HTML, artifact id: ${uploadRes.id}`);
-                            const artifactDownloadLink = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}/artifacts/${uploadRes.id}`;
-                            await core.summary.addHeading('🧮 Bundle Diff (Rsdoctor)', 3).addLink('Download Bundle Diff HTML Report', artifactDownloadLink).addSeparator();
-                            if (isPullRequestEvent()) {
-                                const { context } = __webpack_require__("./node_modules/.pnpm/@actions+github@4.0.0/node_modules/@actions/github/lib/github.js");
-                                const bundleAnalysisMarkdown = generateBundleAnalysisMarkdown(currentBundleAnalysis, baselineBundleAnalysis || void 0);
-                                const commentBody = `## Rsdoctor Bundle Diff Analysis
-
-${bundleAnalysisMarkdown}
-
-A detailed bundle diff analysis has been generated using Rsdoctor. You can download and view the interactive HTML report from the workflow artifacts.
-
-📦 **Download Link**: [Download Bundle Diff Report](${artifactDownloadLink})
-
-*Generated by Rsdoctor Action*
-`;
-                                try {
-                                    await githubService.updateOrCreateComment(context.payload.pull_request.number, commentBody);
-                                    console.log('✅ Added/updated bundle diff comment to PR');
-                                } catch (commentError) {
-                                    console.warn(`⚠️ Failed to add/update comment to PR: ${commentError}`);
-                                }
-                            }
-                        } catch (e) {
-                            console.warn(`⚠️ Failed to upload or link rsdoctor diff html: ${e}`);
-                        }
-                    }
-                } catch (e) {
-                    console.warn(`⚠️ rsdoctor bundle-diff failed: ${e}`);
-                }
-                if (isPullRequestEvent() && !baselineJsonPath) {
-                    const { context } = __webpack_require__("./node_modules/.pnpm/@actions+github@4.0.0/node_modules/@actions/github/lib/github.js");
-                    const bundleAnalysisMarkdown = generateBundleAnalysisMarkdown(currentBundleAnalysis, baselineBundleAnalysis || void 0);
-                    const commentBody = `## Rsdoctor Bundle Diff Analysis
-
-${bundleAnalysisMarkdown}
-
-*Generated by Rsdoctor Action*
-`;
-                    try {
-                        await githubService.updateOrCreateComment(context.payload.pull_request.number, commentBody);
-                        console.log('✅ Added/updated bundle diff comment to PR (no baseline)');
-                    } catch (commentError) {
-                        console.warn(`⚠️ Failed to add/update comment to PR: ${commentError}`);
-                    }
-                }
-                await generateBundleAnalysisReport(currentBundleAnalysis, baselineBundleAnalysis || void 0);
-            } else {
+            }
+            if (!isMergeEvent() && !isPullRequestEvent()) {
                 console.log('ℹ️ Skipping artifact operations - this action only runs on merge events and pull requests');
                 console.log('Current event:', process.env.GITHUB_EVENT_NAME);
                 return;
