@@ -48,13 +48,11 @@
     "@types/node-fetch": "^2.6.11",
     "@types/yauzl": "^2.10.3",
     "mock-fs": "^5.2.0",
+    "fast-glob": "^3.3.3",
     "nock": "^13.5.4",
     "yauzl": "^3.2.0"
   },
   "overrides": {
     "@rsdoctor/client": "1.3.3-beta.2"
-  },
-  "dependencies": {
-    "fast-glob": "^3.3.3"
   }
 }

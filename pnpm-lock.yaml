@@ -7,10 +7,6 @@ settings:
 importers:
 
   .:
-    dependencies:
-      fast-glob:
-        specifier: ^3.3.3
-        version: 3.3.3
     devDependencies:
       '@actions/artifact':
         specifier: ^2.3.2
@@ -45,6 +41,9 @@ importers:
       '@types/yauzl':
         specifier: ^2.10.3
         version: 2.10.3
+      fast-glob:
+        specifier: ^3.3.3
+        version: 3.3.3
       mock-fs:
         specifier: ^5.2.0
         version: 5.5.0
