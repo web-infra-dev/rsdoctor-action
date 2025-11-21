@@ -80,6 +80,8 @@ interface ProjectReport {
   filePath: string;
   current: BundleAnalysis | null;
   baseline: BundleAnalysis | null;
+  baselineCommitHash?: string | null;
+  baselinePRs?: Array<{ number: number; title: string; url: string }>;
   diffHtmlPath?: string;
   diffHtmlArtifactId?: number;
 }
@@ -147,6 +149,7 @@ async function processSingleFile(
   report.current = currentBundleAnalysis;
   
   let baselineJsonPath: string | null = null;
+  let baselinePRs: Array<{ number: number; title: string; url: string }> = [];
   if (targetCommitHash) {
     try {
       console.log(`📥 Attempting to download baseline for ${projectName}...`);
@@ -158,6 +161,20 @@ async function processSingleFile(
       const baselineBundleAnalysis = parseRsdoctorData(baselineJsonPath);
       if (baselineBundleAnalysis) {
         report.baseline = baselineBundleAnalysis;
+        report.baselineCommitHash = targetCommitHash;
+        
+        // Try to find associated PRs for the baseline commit
+        try {
+          const githubService = new GitHubService();
+          baselinePRs = await githubService.findPRsByCommit(targetCommitHash);
+          if (baselinePRs.length > 0) {
+            report.baselinePRs = baselinePRs;
+            console.log(`📎 Found ${baselinePRs.length} PR(s) associated with baseline commit ${targetCommitHash}`);
+          }
+        } catch (prError) {
+          console.log(`ℹ️  Could not find PRs for baseline commit: ${prError}`);
+        }
+        
         console.log(`✅ Successfully downloaded and parsed baseline for ${projectName}`);
       }
     } catch (downloadError) {
@@ -313,7 +330,7 @@ async function processSingleFile(
           // Single project: use existing report format
           const report = projectReports[0];
           if (report.current) {
-            await generateBundleAnalysisReport(report.current);
+            await generateBundleAnalysisReport(report.current, undefined, true, null, undefined);
           }
         } else {
           await summary.addHeading('📦 Monorepo Bundle Analysis', 2);
@@ -323,7 +340,7 @@ async function processSingleFile(
             
             await summary.addHeading(`📁 ${report.projectName}`, 3);
             await summary.addRaw(`**Path:** \`${report.filePath}\``);
-            await generateBundleAnalysisReport(report.current, undefined, false);
+            await generateBundleAnalysisReport(report.current, undefined, false, null, undefined);
           }
           
           await summary.write();
@@ -342,7 +359,7 @@ async function processSingleFile(
         if (projectReports.length === 1) {
           const report = projectReports[0];
           if (report.current) {
-            await generateBundleAnalysisReport(report.current, report.baseline || undefined);
+            await generateBundleAnalysisReport(report.current, report.baseline || undefined, true, report.baselineCommitHash, report.baselinePRs);
           }
         } else {
           await summary.addHeading('📦 Monorepo Bundle Analysis', 2);
@@ -353,7 +370,7 @@ async function processSingleFile(
             await summary.addHeading(`📁 ${report.projectName}`, 3);
             await summary.addRaw(`**Path:** \`${report.filePath}\``);
 
-            await generateBundleAnalysisReport(report.current, report.baseline || undefined, false);
+            await generateBundleAnalysisReport(report.current, report.baseline || undefined, false, report.baselineCommitHash, report.baselinePRs);
           }
           
           await summary.write();
@@ -374,7 +391,7 @@ async function processSingleFile(
       for (const report of projectReports) {
         if (!report.current) continue;
         
-        commentBody += generateProjectMarkdown(report.projectName, report.filePath, report.current, report.baseline || undefined);
+        commentBody += generateProjectMarkdown(report.projectName, report.filePath, report.current, report.baseline || undefined, report.baselineCommitHash, report.baselinePRs);
         
         // Add diff HTML link if available
         if (report.diffHtmlArtifactId) {

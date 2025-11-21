@@ -184,13 +184,26 @@ export function generateProjectMarkdown(
   projectName: string,
   filePath: string,
   current: BundleAnalysis,
-  baseline?: BundleAnalysis
+  baseline?: BundleAnalysis,
+  baselineCommitHash?: string | null,
+  baselinePRs?: Array<{ number: number; title: string; url: string }>
 ): string {
   let markdown = `### 📁 ${projectName}\n\n`;
   markdown += `**Path:** \`${filePath}\`\n\n`;
   
   if (!baseline) {
     markdown += '> ⚠️ **No baseline data found** - Unable to perform comparison analysis\n\n';
+  } else if (baselineCommitHash) {
+    const commitLink = `${process.env.GITHUB_SERVER_URL || 'https://github.com'}/${process.env.GITHUB_REPOSITORY}/commit/${baselineCommitHash}`;
+    let baselineInfo = `> 📌 **Baseline Commit:** [\`${baselineCommitHash}\`](${commitLink})`;
+    
+    // Add PR links if available
+    if (baselinePRs && baselinePRs.length > 0) {
+      const prLinks = baselinePRs.map(pr => `[#${pr.number}](${pr.url})`).join(', ');
+      baselineInfo += ` | **PR:** ${prLinks}`;
+    }
+    
+    markdown += `${baselineInfo}\n\n`;
   }
   
   markdown += '| Metric | Current | Baseline | Change |\n';
@@ -208,13 +221,27 @@ export function generateProjectMarkdown(
 export async function generateBundleAnalysisReport(
   current: BundleAnalysis, 
   baseline?: BundleAnalysis,
-  writeSummary: boolean = true
+  writeSummary: boolean = true,
+  baselineCommitHash?: string | null,
+  baselinePRs?: Array<{ number: number; title: string; url: string }>
 ): Promise<void> {
   if (!baseline) {
     await summary
       .addRaw('> ⚠️ **No baseline data found** - Unable to perform comparison analysis')
       .addSeparator();
   } else {
+    if (baselineCommitHash) {
+      const commitLink = `${process.env.GITHUB_SERVER_URL || 'https://github.com'}/${process.env.GITHUB_REPOSITORY}/commit/${baselineCommitHash}`;
+      let baselineInfo = `> 📌 **Baseline Commit:** [\`${baselineCommitHash}\`](${commitLink})`;
+      
+      // Add PR links if available
+      if (baselinePRs && baselinePRs.length > 0) {
+        const prLinks = baselinePRs.map(pr => `[#${pr.number}](${pr.url})`).join(', ');
+        baselineInfo += ` | **PR:** ${prLinks}`;
+      }
+      
+      await summary.addRaw(baselineInfo);
+    }
     await summary.addSeparator();
   }
   

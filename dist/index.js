@@ -95857,6 +95857,24 @@ var __webpack_exports__ = {};
                 return null;
             }
         }
+        async findPRsByCommit(commitHash) {
+            const { owner, repo } = this.repository;
+            try {
+                const { data: prs } = await this.octokit.rest.repos.listPullRequestsAssociatedWithCommit({
+                    owner,
+                    repo,
+                    commit_sha: commitHash
+                });
+                return prs.map((pr)=>({
+                        number: pr.number,
+                        title: pr.title,
+                        url: pr.html_url
+                    }));
+            } catch (error) {
+                console.warn(`⚠️  Failed to find PRs for commit ${commitHash}: ${error}`);
+                return [];
+            }
+        }
         async updateOrCreateComment(prNumber, body) {
             const { owner, repo } = this.repository;
             const commentPrefix = '## Rsdoctor Bundle Diff Analysis';
@@ -96114,10 +96132,20 @@ var __webpack_exports__ = {};
             emoji: '📉'
         };
     }
-    function generateProjectMarkdown(projectName, filePath, current, baseline) {
+    function generateProjectMarkdown(projectName, filePath, current, baseline, baselineCommitHash, baselinePRs) {
         let markdown = `### 📁 ${projectName}\n\n`;
         markdown += `**Path:** \`${filePath}\`\n\n`;
-        if (!baseline) markdown += '> ⚠️ **No baseline data found** - Unable to perform comparison analysis\n\n';
+        if (baseline) {
+            if (baselineCommitHash) {
+                const commitLink = `${process.env.GITHUB_SERVER_URL || 'https://github.com'}/${process.env.GITHUB_REPOSITORY}/commit/${baselineCommitHash}`;
+                let baselineInfo = `> 📌 **Baseline Commit:** [\`${baselineCommitHash}\`](${commitLink})`;
+                if (baselinePRs && baselinePRs.length > 0) {
+                    const prLinks = baselinePRs.map((pr)=>`[#${pr.number}](${pr.url})`).join(', ');
+                    baselineInfo += ` | **PR:** ${prLinks}`;
+                }
+                markdown += `${baselineInfo}\n\n`;
+            }
+        } else markdown += '> ⚠️ **No baseline data found** - Unable to perform comparison analysis\n\n';
         markdown += '| Metric | Current | Baseline | Change |\n';
         markdown += '|--------|---------|----------|--------|\n';
         markdown += `| 📊 Total Size | ${formatBytes(current.totalSize)} | ${baseline ? formatBytes(baseline.totalSize) : '-'} | ${baseline ? calculateDiff(current.totalSize, baseline.totalSize).value : '-'} |\n`;
@@ -96128,9 +96156,19 @@ var __webpack_exports__ = {};
         markdown += '\n';
         return markdown;
     }
-    async function generateBundleAnalysisReport(current, baseline, writeSummary = true) {
-        if (baseline) await core.summary.addSeparator();
-        else await core.summary.addRaw('> ⚠️ **No baseline data found** - Unable to perform comparison analysis').addSeparator();
+    async function generateBundleAnalysisReport(current, baseline, writeSummary = true, baselineCommitHash, baselinePRs) {
+        if (baseline) {
+            if (baselineCommitHash) {
+                const commitLink = `${process.env.GITHUB_SERVER_URL || 'https://github.com'}/${process.env.GITHUB_REPOSITORY}/commit/${baselineCommitHash}`;
+                let baselineInfo = `> 📌 **Baseline Commit:** [\`${baselineCommitHash}\`](${commitLink})`;
+                if (baselinePRs && baselinePRs.length > 0) {
+                    const prLinks = baselinePRs.map((pr)=>`[#${pr.number}](${pr.url})`).join(', ');
+                    baselineInfo += ` | **PR:** ${prLinks}`;
+                }
+                await core.summary.addRaw(baselineInfo);
+            }
+            await core.summary.addSeparator();
+        } else await core.summary.addRaw('> ⚠️ **No baseline data found** - Unable to perform comparison analysis').addSeparator();
         const mainTable = [
             [
                 {
@@ -96418,6 +96456,7 @@ var __webpack_exports__ = {};
         }
         report.current = currentBundleAnalysis;
         let baselineJsonPath = null;
+        let baselinePRs = [];
         if (targetCommitHash) try {
             console.log(`📥 Attempting to download baseline for ${projectName}...`);
             const downloadResult = await downloadArtifactByCommitHash(targetCommitHash, fileName, fullPath);
@@ -96426,6 +96465,17 @@ var __webpack_exports__ = {};
             const baselineBundleAnalysis = parseRsdoctorData(baselineJsonPath);
             if (baselineBundleAnalysis) {
                 report.baseline = baselineBundleAnalysis;
+                report.baselineCommitHash = targetCommitHash;
+                try {
+                    const githubService = new GitHubService();
+                    baselinePRs = await githubService.findPRsByCommit(targetCommitHash);
+                    if (baselinePRs.length > 0) {
+                        report.baselinePRs = baselinePRs;
+                        console.log(`📎 Found ${baselinePRs.length} PR(s) associated with baseline commit ${targetCommitHash}`);
+                    }
+                } catch (prError) {
+                    console.log(`ℹ️  Could not find PRs for baseline commit: ${prError}`);
+                }
                 console.log(`✅ Successfully downloaded and parsed baseline for ${projectName}`);
             }
         } catch (downloadError) {
@@ -96540,13 +96590,13 @@ var __webpack_exports__ = {};
                 }
                 if (projectReports.length > 0) if (1 === projectReports.length) {
                     const report = projectReports[0];
-                    if (report.current) await generateBundleAnalysisReport(report.current);
+                    if (report.current) await generateBundleAnalysisReport(report.current, void 0, true, null, void 0);
                 } else {
                     await core.summary.addHeading('📦 Monorepo Bundle Analysis', 2);
                     for (const report of projectReports)if (report.current) {
                         await core.summary.addHeading(`📁 ${report.projectName}`, 3);
                         await core.summary.addRaw(`**Path:** \`${report.filePath}\``);
-                        await generateBundleAnalysisReport(report.current, void 0, false);
+                        await generateBundleAnalysisReport(report.current, void 0, false, null, void 0);
                     }
                     await core.summary.write();
                 }
@@ -96558,13 +96608,13 @@ var __webpack_exports__ = {};
                 }
                 if (projectReports.length > 0) if (1 === projectReports.length) {
                     const report = projectReports[0];
-                    if (report.current) await generateBundleAnalysisReport(report.current, report.baseline || void 0);
+                    if (report.current) await generateBundleAnalysisReport(report.current, report.baseline || void 0, true, report.baselineCommitHash, report.baselinePRs);
                 } else {
                     await core.summary.addHeading('📦 Monorepo Bundle Analysis', 2);
                     for (const report of projectReports)if (report.current) {
                         await core.summary.addHeading(`📁 ${report.projectName}`, 3);
                         await core.summary.addRaw(`**Path:** \`${report.filePath}\``);
-                        await generateBundleAnalysisReport(report.current, report.baseline || void 0, false);
+                        await generateBundleAnalysisReport(report.current, report.baseline || void 0, false, report.baselineCommitHash, report.baselinePRs);
                     }
                     await core.summary.write();
                 }
@@ -96574,7 +96624,7 @@ var __webpack_exports__ = {};
                 let commentBody = '## Rsdoctor Bundle Diff Analysis\n\n';
                 if (projectReports.length > 1) commentBody += `Found ${projectReports.length} project(s) in monorepo.\n\n`;
                 for (const report of projectReports)if (report.current) {
-                    commentBody += generateProjectMarkdown(report.projectName, report.filePath, report.current, report.baseline || void 0);
+                    commentBody += generateProjectMarkdown(report.projectName, report.filePath, report.current, report.baseline || void 0, report.baselineCommitHash, report.baselinePRs);
                     if (report.diffHtmlArtifactId) {
                         const artifactDownloadLink = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}/artifacts/${report.diffHtmlArtifactId}`;
                         commentBody += `\n📦 **Download Diff Report**: [${report.projectName} Bundle Diff](${artifactDownloadLink})\n\n`;

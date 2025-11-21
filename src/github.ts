@@ -253,6 +253,30 @@ export class GitHubService {
     }
   }
 
+  /**
+   * Find PRs associated with a commit
+   */
+  async findPRsByCommit(commitHash: string): Promise<Array<{ number: number; title: string; url: string }>> {
+    const { owner, repo } = this.repository;
+    
+    try {
+      const { data: prs } = await this.octokit.rest.repos.listPullRequestsAssociatedWithCommit({
+        owner,
+        repo,
+        commit_sha: commitHash,
+      });
+      
+      return prs.map((pr: any) => ({
+        number: pr.number,
+        title: pr.title,
+        url: pr.html_url
+      }));
+    } catch (error) {
+      console.warn(`⚠️  Failed to find PRs for commit ${commitHash}: ${error}`);
+      return [];
+    }
+  }
+
   async updateOrCreateComment(prNumber: number, body: string): Promise<void> {
     const { owner, repo } = this.repository;
     const commentPrefix = '## Rsdoctor Bundle Diff Analysis';
