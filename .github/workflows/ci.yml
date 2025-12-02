@@ -3,6 +3,8 @@ name: Build
 on:
   pull_request:
     types: [opened, synchronize, reopened, closed]
+  push:
+    branch: 'main'
 
 jobs:
   Build:
