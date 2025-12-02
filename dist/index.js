@@ -96350,27 +96350,6 @@ var __webpack_exports__ = {};
     var out = __webpack_require__("./node_modules/.pnpm/fast-glob@3.3.3/node_modules/fast-glob/out/index.js");
     var out_default = /*#__PURE__*/ __webpack_require__.n(out);
     const execFileAsync = (0, external_util_.promisify)(external_child_process_.execFile);
-    function isMergeEvent() {
-        const { context } = __webpack_require__("./node_modules/.pnpm/@actions+github@4.0.0/node_modules/@actions/github/lib/github.js");
-        const isPR = 'pull_request' === context.eventName;
-        if (isPR) {
-            const prAction = context.payload.action;
-            const prMerged = context.payload.pull_request?.merged;
-            const prNumber = context.payload.pull_request?.number;
-            const baseRef = context.payload.pull_request?.base?.ref;
-            const headRef = context.payload.pull_request?.head?.ref;
-            const isMerge = 'closed' === prAction && true === prMerged;
-            if (isMerge) {
-                console.log(`🔄 Detected merge event: pull request closed and merged`);
-                console.log(`   Event: ${context.eventName}, Action: ${prAction}`);
-                console.log(`   PR #${prNumber}: ${headRef} -> ${baseRef}`);
-                console.log(`   Merged: ${prMerged}`);
-                console.log(`   This is a merge event - branch was merged to ${baseRef}`);
-            }
-            return isMerge;
-        }
-        return false;
-    }
     function isPullRequestEvent() {
         const { context } = __webpack_require__("./node_modules/.pnpm/@actions+github@4.0.0/node_modules/@actions/github/lib/github.js");
         const isPR = 'pull_request' === context.eventName;
@@ -96380,17 +96359,35 @@ var __webpack_exports__ = {};
             const prNumber = context.payload.pull_request?.number;
             const baseRef = context.payload.pull_request?.base?.ref;
             const headRef = context.payload.pull_request?.head?.ref;
-            if ('closed' === prAction && true === prMerged) {
-                console.log(`ℹ️  PR is closed and merged - this should be handled by merge event logic`);
+            if ('closed' === prAction) {
+                if (true === prMerged) console.log(`ℹ️  PR is closed and merged - upload will happen on push event`);
+                else console.log(`ℹ️  PR is closed but not merged - skipping processing`);
                 return false;
             }
             console.log(`📥 Detected pull request event`);
             console.log(`   Action: ${prAction}`);
             console.log(`   PR #${prNumber}: ${headRef} -> ${baseRef}`);
             console.log(`   Merged: ${prMerged}`);
-            console.log("   This is a PR review/update event - comparing with baseline");
+            console.log("   This is a PR review/update event - comparing with baseline (no upload)");
         }
         return isPR;
+    }
+    function isPushEvent() {
+        const { context } = __webpack_require__("./node_modules/.pnpm/@actions+github@4.0.0/node_modules/@actions/github/lib/github.js");
+        const isPush = 'push' === context.eventName;
+        if (isPush) {
+            const ref = context.ref;
+            const targetBranch = (0, core.getInput)('target_branch') || 'main';
+            const targetBranchRef = `refs/heads/${targetBranch}`;
+            if (ref === targetBranchRef) {
+                console.log(`🔄 Detected push event to ${targetBranch} branch`);
+                console.log("   This may be a merge commit - will upload artifacts");
+                return true;
+            }
+            console.log(`ℹ️  Push event detected but not to target branch (${targetBranch})`);
+            console.log(`   Current ref: ${ref}`);
+        }
+        return false;
     }
     function runRsdoctorViaNode(requirePath, args = []) {
         const nodeExec = process.execPath;
@@ -96564,11 +96561,11 @@ var __webpack_exports__ = {};
                 console.error(`❌ Failed to get target branch commit: ${error}`);
                 console.log('📝 No baseline data available for comparison');
             }
-            const isMerge = isMergeEvent();
+            const isPush = isPushEvent();
             const isPR = isPullRequestEvent();
             const projectReports = [];
-            if (isMerge) {
-                console.log('🔄 Detected merge event - uploading current branch artifacts');
+            if (isPush) {
+                console.log('🔄 Detected push event to target branch - uploading artifacts');
                 for (const fullPath of matchedFiles){
                     const uploadResponse = await uploadArtifact(fullPath, currentCommitHash);
                     if ('number' != typeof uploadResponse.id) console.warn(`⚠️ Artifact upload failed for ${fullPath}`);
@@ -96638,8 +96635,8 @@ var __webpack_exports__ = {};
                     console.warn(`⚠️ Failed to add/update comment to PR: ${commentError}`);
                 }
             }
-            if (!isMerge && !isPR) {
-                console.log('ℹ️ Skipping artifact operations - this action only runs on merge events and pull requests');
+            if (!isPush && !isPR) {
+                console.log('ℹ️ Skipping artifact operations - this action only runs on push events (to target branch) and pull requests');
                 console.log('Current event:', process.env.GITHUB_EVENT_NAME);
                 return;
             }

@@ -11,31 +11,9 @@ import { spawnSync } from 'child_process';
 import fg from 'fast-glob';
 const execFileAsync = promisify(execFile);
 
+// Note: isMergeEvent is no longer used - upload happens on push event after merge
+// Keeping for backward compatibility but it will always return false
 function isMergeEvent(): boolean {
-  const { context } = require('@actions/github');
-  const isPR = context.eventName === 'pull_request';
-
-  if (isPR) {
-    const prAction = context.payload.action;
-    const prMerged = context.payload.pull_request?.merged;
-    const prNumber = context.payload.pull_request?.number;
-    const baseRef = context.payload.pull_request?.base?.ref;
-    const headRef = context.payload.pull_request?.head?.ref;
-
-    // Check if this is a merge event: PR closed and merged
-    const isMerge = prAction === 'closed' && prMerged === true;
-
-    if (isMerge) {
-      console.log(`🔄 Detected merge event: pull request closed and merged`);
-      console.log(`   Event: ${context.eventName}, Action: ${prAction}`);
-      console.log(`   PR #${prNumber}: ${headRef} -> ${baseRef}`);
-      console.log(`   Merged: ${prMerged}`);
-      console.log(`   This is a merge event - branch was merged to ${baseRef}`);
-    }
-
-    return isMerge;
-  }
-
   return false;
 }
 
@@ -50,9 +28,13 @@ function isPullRequestEvent(): boolean {
     const baseRef = context.payload.pull_request?.base?.ref;
     const headRef = context.payload.pull_request?.head?.ref;
 
-    // Skip if PR is closed and merged - this should be handled by isMergeEvent
-    if (prAction === 'closed' && prMerged === true) {
-      console.log(`ℹ️  PR is closed and merged - this should be handled by merge event logic`);
+    // Skip if PR is closed (whether merged or not) - upload happens on push event after merge
+    if (prAction === 'closed') {
+      if (prMerged === true) {
+        console.log(`ℹ️  PR is closed and merged - upload will happen on push event`);
+      } else {
+        console.log(`ℹ️  PR is closed but not merged - skipping processing`);
+      }
       return false;
     }
 
@@ -60,10 +42,34 @@ function isPullRequestEvent(): boolean {
     console.log(`   Action: ${prAction}`);
     console.log(`   PR #${prNumber}: ${headRef} -> ${baseRef}`);
     console.log(`   Merged: ${prMerged}`);
-    console.log(`   This is a PR review/update event - comparing with baseline`);
+    console.log(`   This is a PR review/update event - comparing with baseline (no upload)`);
   }
 
   return isPR;
+}
+
+function isPushEvent(): boolean {
+  const { context } = require('@actions/github');
+  const isPush = context.eventName === 'push';
+  
+  if (isPush) {
+    const ref = context.ref;
+    const targetBranch = getInput('target_branch') || 'main';
+    const targetBranchRef = `refs/heads/${targetBranch}`;
+    
+    // Check if this push is to the target branch (main/master)
+    if (ref === targetBranchRef) {
+      console.log(`🔄 Detected push event to ${targetBranch} branch`);
+      console.log(`   This may be a merge commit - will upload artifacts`);
+      return true;
+    } else {
+      console.log(`ℹ️  Push event detected but not to target branch (${targetBranch})`);
+      console.log(`   Current ref: ${ref}`);
+      return false;
+    }
+  }
+  
+  return false;
 }
 
 function runRsdoctorViaNode(requirePath: string, args: string[] = []) {
@@ -287,13 +293,13 @@ async function processSingleFile(
       }
     }
     
-    const isMerge = isMergeEvent();
+    const isPush = isPushEvent();
     const isPR = isPullRequestEvent();
     
     const projectReports: ProjectReport[] = [];
     
-    if (isMerge) {
-      console.log('🔄 Detected merge event - uploading current branch artifacts');
+    if (isPush) {
+      console.log('🔄 Detected push event to target branch - uploading artifacts');
       
       for (const fullPath of matchedFiles) {
         const uploadResponse = await uploadArtifact(fullPath, currentCommitHash);
@@ -324,7 +330,7 @@ async function processSingleFile(
         }
       }
       
-      // Generate combined summary for all projects in merge event
+      // Generate combined summary for all projects in push event
       if (projectReports.length > 0) {
         if (projectReports.length === 1) {
           // Single project: use existing report format
@@ -413,8 +419,8 @@ async function processSingleFile(
       }
     }
     
-    if (!isMerge && !isPR) {
-      console.log('ℹ️ Skipping artifact operations - this action only runs on merge events and pull requests');
+    if (!isPush && !isPR) {
+      console.log('ℹ️ Skipping artifact operations - this action only runs on push events (to target branch) and pull requests');
       console.log('Current event:', process.env.GITHUB_EVENT_NAME);
       return;
     }
