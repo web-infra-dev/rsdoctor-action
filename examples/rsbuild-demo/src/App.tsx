@@ -19,7 +19,15 @@ const App = () => {
           Secondary Action
         </button>
       </div>
-      
+            
+      <div className="button-container">
+        <button onClick={handleClick} className="primary-button">
+          Click Me!
+        </button>
+        <button onClick={() => console.log('Secondary button')} className="secondary-button">
+          Secondary Action
+        </button>
+      </div>
       <div className="info-section">
         <div className="feature-card">
           <h3>Fast Build</h3>
