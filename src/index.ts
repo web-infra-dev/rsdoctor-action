@@ -11,12 +11,6 @@ import { spawnSync } from 'child_process';
 import fg from 'fast-glob';
 const execFileAsync = promisify(execFile);
 
-// Note: isMergeEvent is no longer used - upload happens on push event after merge
-// Keeping for backward compatibility but it will always return false
-function isMergeEvent(): boolean {
-  return false;
-}
-
 function isPullRequestEvent(): boolean {
   const { context } = require('@actions/github');
   const isPR = context.eventName === 'pull_request';
