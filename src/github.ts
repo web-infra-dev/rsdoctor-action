@@ -249,6 +249,49 @@ export class GitHubService {
   }
 
   /**
+   * Find all workflow runs by commit hash
+   * Returns all matching workflow runs without sorting
+   */
+  async findAllWorkflowRunsByCommit(commitHash: string, status: 'completed' | 'in_progress' | 'queued' | 'requested' = 'completed') {
+    const { owner, repo } = this.repository;
+    
+    try {
+      // First try to find by exact commit hash
+      const runsResponse = await this.octokit.rest.actions.listWorkflowRunsForRepo({
+        owner,
+        repo,
+        head_sha: commitHash,
+        status,
+        per_page: 30  // Increase to get more runs
+      });
+
+      if (runsResponse.data.workflow_runs && runsResponse.data.workflow_runs.length > 0) {
+        // Return all matching runs without sorting
+        return runsResponse.data.workflow_runs;
+      }
+
+      // If not found by exact hash, try searching by short hash (first 10 chars)
+      const shortHash = commitHash.substring(0, 10);
+      const allRunsResponse = await this.octokit.rest.actions.listWorkflowRunsForRepo({
+        owner,
+        repo,
+        status,
+        per_page: 100
+      });
+
+      const matchingRuns = allRunsResponse.data.workflow_runs?.filter(
+        (run: any) => run.head_sha.startsWith(shortHash) || run.head_sha.startsWith(commitHash)
+      ) || [];
+
+      return matchingRuns;
+    } catch (error) {
+      const apiError = error as ApiError;
+      console.warn(`⚠️  Failed to find workflow runs for commit ${commitHash}: ${apiError.message}`);
+      return [];
+    }
+  }
+
+  /**
    * List artifacts for a specific workflow run
    * This is more efficient than listing all repository artifacts
    */
