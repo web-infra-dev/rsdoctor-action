@@ -122,6 +122,7 @@ async function processSingleFile(
   fullPath: string,
   currentCommitHash: string,
   targetCommitHash: string | null,
+  baselineCache: Record<string, { workflowRunId?: number; artifacts?: any[] }>,
 ): Promise<ProjectReport> {
   const fileName = path.basename(fullPath);
   const relativePath = path.relative(process.cwd(), fullPath);
@@ -153,8 +154,15 @@ async function processSingleFile(
   if (targetCommitHash) {
     try {
       console.log(`📥 Attempting to download baseline for ${projectName}...`);
+      const cacheEntry = baselineCache[targetCommitHash] || {};
       // Pass filePath to ensure we download the correct artifact by path hash
-      const downloadResult = await downloadArtifactByCommitHash(targetCommitHash, fileName, fullPath);
+      const downloadResult = await downloadArtifactByCommitHash(
+        targetCommitHash,
+        fileName,
+        fullPath,
+        cacheEntry
+      );
+      baselineCache[targetCommitHash] = cacheEntry;
       baselineJsonPath = path.join(downloadResult.downloadPath, fileName);
       
       console.log(`📁 Downloaded baseline file path: ${baselineJsonPath}`);
@@ -291,6 +299,7 @@ async function processSingleFile(
     const isPR = isPullRequestEvent();
     
     const projectReports: ProjectReport[] = [];
+    const baselineCache: Record<string, { workflowRunId?: number; artifacts?: any[] }> = {};
     
     if (isPush) {
       console.log('🔄 Detected push event to target branch - uploading artifacts');
@@ -351,7 +360,7 @@ async function processSingleFile(
       console.log('📥 Detected pull request event - processing files');
       
       for (const fullPath of matchedFiles) {
-        const report = await processSingleFile(fullPath, currentCommitHash, targetCommitHash);
+        const report = await processSingleFile(fullPath, currentCommitHash, targetCommitHash, baselineCache);
         projectReports.push(report);
       }
       
