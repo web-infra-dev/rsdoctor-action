@@ -95819,6 +95819,50 @@ var __webpack_exports__ = {};
             });
             return artifactsResponse.data;
         }
+        async findWorkflowRunByCommit(commitHash, status = 'completed') {
+            const { owner, repo } = this.repository;
+            try {
+                const runsResponse = await this.octokit.rest.actions.listWorkflowRunsForRepo({
+                    owner,
+                    repo,
+                    head_sha: commitHash,
+                    status,
+                    per_page: 10
+                });
+                if (runsResponse.data.workflow_runs && runsResponse.data.workflow_runs.length > 0) {
+                    const successfulRun = runsResponse.data.workflow_runs.find((run)=>'success' === run.conclusion);
+                    return successfulRun || runsResponse.data.workflow_runs[0];
+                }
+                const shortHash = commitHash.substring(0, 10);
+                const allRunsResponse = await this.octokit.rest.actions.listWorkflowRunsForRepo({
+                    owner,
+                    repo,
+                    status,
+                    per_page: 100
+                });
+                const matchingRun = allRunsResponse.data.workflow_runs?.find((run)=>run.head_sha.startsWith(shortHash) || run.head_sha.startsWith(commitHash));
+                return matchingRun || null;
+            } catch (error) {
+                const apiError = error;
+                console.warn(`⚠️  Failed to find workflow run for commit ${commitHash}: ${apiError.message}`);
+                return null;
+            }
+        }
+        async listArtifactsForWorkflowRun(runId) {
+            const { owner, repo } = this.repository;
+            try {
+                const artifactsResponse = await this.octokit.rest.actions.listWorkflowRunArtifacts({
+                    owner,
+                    repo,
+                    run_id: runId
+                });
+                return artifactsResponse.data;
+            } catch (error) {
+                const apiError = error;
+                console.warn(`⚠️  Failed to list artifacts for workflow run ${runId}: ${apiError.message}`);
+                throw error;
+            }
+        }
         async findArtifactByNamePattern(pattern) {
             const artifacts = await this.listArtifacts();
             console.log(`Looking for artifacts matching pattern: ${pattern}`);
@@ -95981,11 +96025,36 @@ var __webpack_exports__ = {};
         console.log(`📋 Searching for artifact with path hash and commit hash: ${expectedArtifactName}`);
         console.log(`   Path hash: ${pathHash}`);
         console.log(`   File path: ${relativePath}`);
-        const artifacts = await githubService.listArtifacts();
-        const artifact = artifacts.artifacts.find((a)=>a.name === expectedArtifactName);
+        console.log(`🔍 Looking for workflow run with commit hash: ${commitHash}`);
+        const workflowRun = await githubService.findWorkflowRunByCommit(commitHash);
+        let artifact = null;
+        let artifacts = null;
+        if (workflowRun) {
+            console.log(`✅ Found workflow run: ${workflowRun.id} (${workflowRun.name || 'unnamed'})`);
+            console.log(`   Status: ${workflowRun.status}, Conclusion: ${workflowRun.conclusion}`);
+            try {
+                artifacts = await githubService.listArtifactsForWorkflowRun(workflowRun.id);
+                artifact = artifacts.artifacts?.find((a)=>a.name === expectedArtifactName);
+                if (artifact) console.log(`✅ Found artifact in workflow run: ${artifact.name} (ID: ${artifact.id})`);
+                else {
+                    console.log(`⚠️  Artifact not found in workflow run ${workflowRun.id}`);
+                    console.log(`   Available artifacts in this run: ${artifacts.artifacts?.map((a)=>a.name).join(', ') || 'none'}`);
+                }
+            } catch (runArtifactsError) {
+                console.warn(`⚠️  Failed to get artifacts from workflow run: ${runArtifactsError}`);
+                console.log(`🔄 Falling back to listing all repository artifacts...`);
+            }
+        } else {
+            console.log(`⚠️  No workflow run found for commit ${commitHash}`);
+            console.log(`🔄 Falling back to listing all repository artifacts...`);
+        }
+        if (!artifact) {
+            artifacts = await githubService.listArtifacts();
+            artifact = artifacts.artifacts.find((a)=>a.name === expectedArtifactName);
+        }
         if (!artifact) {
             console.log(`❌ No artifact found matching: ${expectedArtifactName}`);
-            console.log(`   Available artifacts: ${artifacts.artifacts.map((a)=>a.name).join(', ')}`);
+            if (artifacts?.artifacts) console.log(`   Available artifacts: ${artifacts.artifacts.map((a)=>a.name).join(', ')}`);
             console.log(`💡 This might mean:`);
             console.log("   - The target branch hasn't been built yet");
             console.log("   - The artifact name pattern doesn't match");
@@ -95993,18 +96062,13 @@ var __webpack_exports__ = {};
             throw new Error(`No artifact found matching: ${expectedArtifactName}`);
         }
         console.log(`✅ Found exact match: ${artifact.name} (ID: ${artifact.id})`);
-        try {
-            const artifacts = await githubService.listArtifacts();
-            const artifactDetails = artifacts.artifacts.find((a)=>a.id === artifact.id);
-            if (artifactDetails) {
-                console.log(`📊 Artifact details:`);
-                console.log(`   - Created: ${artifactDetails.created_at}`);
-                console.log(`   - Expired: ${artifactDetails.expired_at || 'Not expired'}`);
-                console.log(`   - Size: ${artifactDetails.size_in_bytes} bytes`);
-                if (artifactDetails.expired_at) console.log(`⚠️  Warning: This artifact has expired and may not be downloadable`);
-            }
-        } catch (detailError) {
-            console.warn(`⚠️  Could not get artifact details: ${detailError || 'Unknown error'}`);
+        const artifactDetails = artifact;
+        if (artifactDetails) {
+            console.log(`📊 Artifact details:`);
+            console.log(`   - Created: ${artifactDetails.created_at}`);
+            console.log(`   - Expired: ${artifactDetails.expired_at || 'Not expired'}`);
+            console.log(`   - Size: ${artifactDetails.size_in_bytes} bytes`);
+            if (artifactDetails.expired_at) console.log(`⚠️  Warning: This artifact has expired and may not be downloadable`);
         }
         console.log(`📥 Downloading artifact...`);
         try {

@@ -202,6 +202,74 @@ export class GitHubService {
     return artifactsResponse.data;
   }
 
+  /**
+   * Find workflow run by commit hash
+   * This is more efficient than listing all artifacts
+   */
+  async findWorkflowRunByCommit(commitHash: string, status: 'completed' | 'in_progress' | 'queued' | 'requested' = 'completed') {
+    const { owner, repo } = this.repository;
+    
+    try {
+      // First try to find by exact commit hash
+      const runsResponse = await this.octokit.rest.actions.listWorkflowRunsForRepo({
+        owner,
+        repo,
+        head_sha: commitHash,
+        status,
+        per_page: 10
+      });
+
+      if (runsResponse.data.workflow_runs && runsResponse.data.workflow_runs.length > 0) {
+        // Return the most recent successful run, or the first one if no successful run
+        const successfulRun = runsResponse.data.workflow_runs.find(
+          (run: any) => run.conclusion === 'success'
+        );
+        return successfulRun || runsResponse.data.workflow_runs[0];
+      }
+
+      // If not found by exact hash, try searching by short hash (first 10 chars)
+      const shortHash = commitHash.substring(0, 10);
+      const allRunsResponse = await this.octokit.rest.actions.listWorkflowRunsForRepo({
+        owner,
+        repo,
+        status,
+        per_page: 100
+      });
+
+      const matchingRun = allRunsResponse.data.workflow_runs?.find(
+        (run: any) => run.head_sha.startsWith(shortHash) || run.head_sha.startsWith(commitHash)
+      );
+
+      return matchingRun || null;
+    } catch (error) {
+      const apiError = error as ApiError;
+      console.warn(`⚠️  Failed to find workflow run for commit ${commitHash}: ${apiError.message}`);
+      return null;
+    }
+  }
+
+  /**
+   * List artifacts for a specific workflow run
+   * This is more efficient than listing all repository artifacts
+   */
+  async listArtifactsForWorkflowRun(runId: number) {
+    const { owner, repo } = this.repository;
+    
+    try {
+      const artifactsResponse = await this.octokit.rest.actions.listWorkflowRunArtifacts({
+        owner,
+        repo,
+        run_id: runId
+      });
+
+      return artifactsResponse.data;
+    } catch (error) {
+      const apiError = error as ApiError;
+      console.warn(`⚠️  Failed to list artifacts for workflow run ${runId}: ${apiError.message}`);
+      throw error;
+    }
+  }
+
   async findArtifactByNamePattern(pattern: string): Promise<Artifact | null> {
     const artifacts = await this.listArtifacts();
     
