@@ -96038,7 +96038,7 @@ var __webpack_exports__ = {};
             throw error;
         }
     }
-    async function downloadArtifactByCommitHash(commitHash, fileName, filePath, baselineCache) {
+    async function downloadArtifactByCommitHash(commitHash, fileName, filePath) {
         if (!filePath) throw new Error('filePath is required for artifact download');
         console.log(`🔍 Looking for artifact with commit hash: ${commitHash}`);
         const githubService = new GitHubService();
@@ -96051,20 +96051,10 @@ var __webpack_exports__ = {};
         console.log(`📋 Searching for artifact with path hash and commit hash: ${expectedArtifactName}`);
         console.log(`   Path hash: ${pathHash}`);
         console.log(`   File path: ${relativePath}`);
-        if (baselineCache?.workflowRunId && baselineCache.artifacts?.length) {
-            console.log(`🔍 Using cached workflow run ${baselineCache.workflowRunId} artifacts for commit ${commitHash}`);
-            const cachedArtifact = baselineCache.artifacts.find((a)=>a.name === expectedArtifactName);
-            if (cachedArtifact) {
-                console.log(`✅ Found matching artifact in cached workflow run ${baselineCache.workflowRunId}: ${cachedArtifact.name} (ID: ${cachedArtifact.id})`);
-                return downloadArtifact(cachedArtifact.id, fileName);
-            }
-            console.log(`⚠️ Cached workflow run ${baselineCache.workflowRunId} does not contain artifact ${expectedArtifactName}, will search again.`);
-        }
         console.log(`🔍 Looking for workflow runs with commit hash: ${commitHash}`);
         const workflowRuns = await githubService.findAllWorkflowRunsByCommit(commitHash);
         let artifact = null;
         let artifacts = null;
-        let selectedWorkflowRun = null;
         if (workflowRuns && workflowRuns.length > 0) {
             console.log(`✅ Found ${workflowRuns.length} workflow run(s) for commit ${commitHash}`);
             for (const workflowRun of workflowRuns){
@@ -96072,30 +96062,24 @@ var __webpack_exports__ = {};
                 console.log(`   Status: ${workflowRun.status}, Conclusion: ${workflowRun.conclusion}`);
                 try {
                     const runArtifacts = await githubService.listArtifactsForWorkflowRun(workflowRun.id);
-                    if (runArtifacts.artifacts && runArtifacts.artifacts.length > 0) {
-                        selectedWorkflowRun = workflowRun;
+                    const foundArtifact = runArtifacts.artifacts?.find((a)=>a.name === expectedArtifactName);
+                    if (foundArtifact) {
+                        artifact = foundArtifact;
                         artifacts = runArtifacts;
-                        if (baselineCache) {
-                            baselineCache.workflowRunId = workflowRun.id;
-                            baselineCache.artifacts = runArtifacts.artifacts;
-                        }
-                        artifact = runArtifacts.artifacts.find((a)=>a.name === expectedArtifactName);
-                        if (artifact) console.log(`✅ Found matching artifact in workflow run ${workflowRun.id}: ${artifact.name} (ID: ${artifact.id})`);
-                        else {
-                            const artifactNames = runArtifacts.artifacts.map((a)=>a.name).join(', ');
-                            console.log(`   ⚠️  Artifact "${expectedArtifactName}" not found in this workflow run`);
-                            console.log(`   Available artifacts: ${artifactNames}`);
-                        }
+                        console.log(`✅ Found artifact in workflow run ${workflowRun.id}: ${artifact.name} (ID: ${artifact.id})`);
                         break;
                     }
-                    console.log(`   ⚠️  No artifacts in this workflow run`);
+                    {
+                        const artifactNames = runArtifacts.artifacts?.map((a)=>a.name).join(', ') || 'none';
+                        console.log(`   ⚠️  Artifact not found. Available artifacts: ${artifactNames}`);
+                    }
                 } catch (runArtifactsError) {
                     console.warn(`   ⚠️  Failed to get artifacts from workflow run ${workflowRun.id}: ${runArtifactsError}`);
                     continue;
                 }
             }
-            if (!selectedWorkflowRun) {
-                console.log(`\n⚠️  No workflow runs with artifacts found for commit ${commitHash}`);
+            if (!artifact) {
+                console.log(`\n⚠️  Artifact not found in any of the ${workflowRuns.length} workflow runs`);
                 console.log(`🔄 Falling back to listing all repository artifacts...`);
             }
         } else {
@@ -96549,7 +96533,7 @@ var __webpack_exports__ = {};
         }
         return pathParts[0] || 'root';
     }
-    async function processSingleFile(fullPath, currentCommitHash, targetCommitHash, baselineCache) {
+    async function processSingleFile(fullPath, currentCommitHash, targetCommitHash) {
         const fileName = external_path_default().basename(fullPath);
         const relativePath = external_path_default().relative(process.cwd(), fullPath);
         const pathParts = relativePath.split(external_path_default().sep);
@@ -96574,9 +96558,7 @@ var __webpack_exports__ = {};
         let baselinePRs = [];
         if (targetCommitHash) try {
             console.log(`📥 Attempting to download baseline for ${projectName}...`);
-            const cacheEntry = baselineCache[targetCommitHash] || {};
-            const downloadResult = await downloadArtifactByCommitHash(targetCommitHash, fileName, fullPath, cacheEntry);
-            baselineCache[targetCommitHash] = cacheEntry;
+            const downloadResult = await downloadArtifactByCommitHash(targetCommitHash, fileName, fullPath);
             baselineJsonPath = external_path_default().join(downloadResult.downloadPath, fileName);
             console.log(`📁 Downloaded baseline file path: ${baselineJsonPath}`);
             const baselineBundleAnalysis = parseRsdoctorData(baselineJsonPath);
@@ -96684,7 +96666,6 @@ var __webpack_exports__ = {};
             const isPush = isPushEvent();
             const isPR = isPullRequestEvent();
             const projectReports = [];
-            const baselineCache = {};
             if (isPush) {
                 console.log('🔄 Detected push event to target branch - uploading artifacts');
                 for (const fullPath of matchedFiles){
@@ -96721,7 +96702,7 @@ var __webpack_exports__ = {};
             } else if (isPR) {
                 console.log('📥 Detected pull request event - processing files');
                 for (const fullPath of matchedFiles){
-                    const report = await processSingleFile(fullPath, currentCommitHash, targetCommitHash, baselineCache);
+                    const report = await processSingleFile(fullPath, currentCommitHash, targetCommitHash);
                     projectReports.push(report);
                 }
                 if (projectReports.length > 0) if (1 === projectReports.length) {

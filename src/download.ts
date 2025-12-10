@@ -90,8 +90,7 @@ export async function downloadArtifact(artifactId: number, fileName: string) {
 export async function downloadArtifactByCommitHash(
   commitHash: string, 
   fileName: string,
-  filePath: string,
-  baselineCache?: { workflowRunId?: number; artifacts?: any[] }
+  filePath: string
 ) {
   if (!filePath) {
     throw new Error('filePath is required for artifact download');
@@ -113,58 +112,33 @@ export async function downloadArtifactByCommitHash(
   console.log(`   Path hash: ${pathHash}`);
   console.log(`   File path: ${relativePath}`);
   
-  // If we already resolved workflow run artifacts for this commit, reuse them
-  if (baselineCache?.workflowRunId && baselineCache.artifacts?.length) {
-    console.log(`🔍 Using cached workflow run ${baselineCache.workflowRunId} artifacts for commit ${commitHash}`);
-    const cachedArtifact = baselineCache.artifacts.find((a: any) => a.name === expectedArtifactName);
-    if (cachedArtifact) {
-      console.log(`✅ Found matching artifact in cached workflow run ${baselineCache.workflowRunId}: ${cachedArtifact.name} (ID: ${cachedArtifact.id})`);
-      return downloadArtifact(cachedArtifact.id, fileName);
-    }
-    console.log(`⚠️ Cached workflow run ${baselineCache.workflowRunId} does not contain artifact ${expectedArtifactName}, will search again.`);
-  }
-  
   // Try to find all workflow runs by commit hash first (more efficient)
   console.log(`🔍 Looking for workflow runs with commit hash: ${commitHash}`);
   const workflowRuns = await githubService.findAllWorkflowRunsByCommit(commitHash);
   
   let artifact: any = null;
   let artifacts: any = null;
-  let selectedWorkflowRun: any = null;
   
   if (workflowRuns && workflowRuns.length > 0) {
     console.log(`✅ Found ${workflowRuns.length} workflow run(s) for commit ${commitHash}`);
     
-    // Search through all workflow runs and pick the first one with artifacts
+    // Search through all workflow runs, starting with the highest priority ones
     for (const workflowRun of workflowRuns) {
       console.log(`\n🔍 Checking workflow run: ${workflowRun.id} (${workflowRun.name || 'unnamed'})`);
       console.log(`   Status: ${workflowRun.status}, Conclusion: ${workflowRun.conclusion}`);
       
       try {
         const runArtifacts = await githubService.listArtifactsForWorkflowRun(workflowRun.id);
+        const foundArtifact = runArtifacts.artifacts?.find((a: any) => a.name === expectedArtifactName);
         
-        if (runArtifacts.artifacts && runArtifacts.artifacts.length > 0) {
-          selectedWorkflowRun = workflowRun;
+        if (foundArtifact) {
+          artifact = foundArtifact;
           artifacts = runArtifacts;
-          if (baselineCache) {
-            baselineCache.workflowRunId = workflowRun.id;
-            baselineCache.artifacts = runArtifacts.artifacts;
-          }
-          
-          // Find the matching artifact in this workflow run's artifacts
-          artifact = runArtifacts.artifacts.find((a: any) => a.name === expectedArtifactName);
-          
-          if (artifact) {
-            console.log(`✅ Found matching artifact in workflow run ${workflowRun.id}: ${artifact.name} (ID: ${artifact.id})`);
-          } else {
-            const artifactNames = runArtifacts.artifacts.map((a: any) => a.name).join(', ');
-            console.log(`   ⚠️  Artifact "${expectedArtifactName}" not found in this workflow run`);
-            console.log(`   Available artifacts: ${artifactNames}`);
-          }
-          
-          break; // Use this workflow run; do not search further runs
+          console.log(`✅ Found artifact in workflow run ${workflowRun.id}: ${artifact.name} (ID: ${artifact.id})`);
+          break; // Found it, stop searching
         } else {
-          console.log(`   ⚠️  No artifacts in this workflow run`);
+          const artifactNames = runArtifacts.artifacts?.map((a: any) => a.name).join(', ') || 'none';
+          console.log(`   ⚠️  Artifact not found. Available artifacts: ${artifactNames}`);
         }
       } catch (runArtifactsError) {
         console.warn(`   ⚠️  Failed to get artifacts from workflow run ${workflowRun.id}: ${runArtifactsError}`);
@@ -172,8 +146,8 @@ export async function downloadArtifactByCommitHash(
       }
     }
     
-    if (!selectedWorkflowRun) {
-      console.log(`\n⚠️  No workflow runs with artifacts found for commit ${commitHash}`);
+    if (!artifact) {
+      console.log(`\n⚠️  Artifact not found in any of the ${workflowRuns.length} workflow runs`);
       console.log(`🔄 Falling back to listing all repository artifacts...`);
     }
   } else {
