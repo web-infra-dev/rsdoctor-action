@@ -128,7 +128,7 @@ export class GitHubService {
     }
   }
 
-  async getTargetBranchLatestCommit(): Promise<string> {
+  async getTargetBranchLatestCommit(): Promise<{ commitHash: string; usedFallbackCommit: boolean; latestCommitHash?: string }> {
     const targetBranch = this.getTargetBranch();
     console.log(`🔍 Attempting to get latest commit for target branch: ${targetBranch}`);
     console.log(`📋 Repository: ${this.repository.owner}/${this.repository.repo}`);
@@ -242,7 +242,10 @@ export class GitHubService {
       
       if (hasArtifacts) {
         console.log(`✅ Commit ${latestCommitHash} has baseline artifacts`);
-        return latestCommitHash;
+        return {
+          commitHash: latestCommitHash,
+          usedFallbackCommit: false
+        };
       }
 
       // Latest commit doesn't have artifacts, look for previous commits
@@ -276,7 +279,11 @@ export class GitHubService {
           console.log(`\n⚠️  Note: The latest commit (${latestCommitHash}) does not have baseline artifacts.`);
           console.log(`   Using commit ${parentCommit} for baseline comparison instead.`);
           console.log(`   If this seems incorrect, please wait a few minutes and try rerunning the workflow.`);
-          return parentCommit;
+          return {
+            commitHash: parentCommit,
+            usedFallbackCommit: true,
+            latestCommitHash: latestCommitHash
+          };
         }
         
         currentCommit = parentCommit;
@@ -286,7 +293,10 @@ export class GitHubService {
       console.log(`\n⚠️  No commits with baseline artifacts found in the last ${maxDepth} commits.`);
       console.log(`   Using latest commit ${latestCommitHash} anyway.`);
       console.log(`   Note: If baseline comparison fails, please wait a few minutes and try rerunning the workflow.`);
-      return latestCommitHash;
+      return {
+        commitHash: latestCommitHash,
+        usedFallbackCommit: false
+      };
       
     } catch (error) {
       console.error(`❌ Failed to get target branch commit: ${error}`);

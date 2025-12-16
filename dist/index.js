@@ -95841,7 +95841,10 @@ var __webpack_exports__ = {};
                 const hasArtifacts = await this.hasArtifactsForCommit(latestCommitHash);
                 if (hasArtifacts) {
                     console.log(`✅ Commit ${latestCommitHash} has baseline artifacts`);
-                    return latestCommitHash;
+                    return {
+                        commitHash: latestCommitHash,
+                        usedFallbackCommit: false
+                    };
                 }
                 console.log(`⚠️  Commit ${latestCommitHash} does not have baseline artifacts`);
                 console.log(`🔍 Looking for previous commits with baseline artifacts...`);
@@ -95868,14 +95871,21 @@ var __webpack_exports__ = {};
                         console.log(`\n⚠️  Note: The latest commit (${latestCommitHash}) does not have baseline artifacts.`);
                         console.log(`   Using commit ${parentCommit} for baseline comparison instead.`);
                         console.log("   If this seems incorrect, please wait a few minutes and try rerunning the workflow.");
-                        return parentCommit;
+                        return {
+                            commitHash: parentCommit,
+                            usedFallbackCommit: true,
+                            latestCommitHash: latestCommitHash
+                        };
                     }
                     currentCommit = parentCommit;
                 }
                 console.log(`\n⚠️  No commits with baseline artifacts found in the last ${maxDepth} commits.`);
                 console.log(`   Using latest commit ${latestCommitHash} anyway.`);
                 console.log("   Note: If baseline comparison fails, please wait a few minutes and try rerunning the workflow.");
-                return latestCommitHash;
+                return {
+                    commitHash: latestCommitHash,
+                    usedFallbackCommit: false
+                };
             } catch (error) {
                 console.error(`❌ Failed to get target branch commit: ${error}`);
                 console.error(`Repository: ${this.repository.owner}/${this.repository.repo}`);
@@ -96607,7 +96617,7 @@ var __webpack_exports__ = {};
         }
         return pathParts[0] || 'root';
     }
-    async function processSingleFile(fullPath, currentCommitHash, targetCommitHash) {
+    async function processSingleFile(fullPath, currentCommitHash, targetCommitHash, baselineUsedFallback, baselineLatestCommitHash) {
         const fileName = external_path_default().basename(fullPath);
         const relativePath = external_path_default().relative(process.cwd(), fullPath);
         const pathParts = relativePath.split(external_path_default().sep);
@@ -96639,6 +96649,8 @@ var __webpack_exports__ = {};
             if (baselineBundleAnalysis) {
                 report.baseline = baselineBundleAnalysis;
                 report.baselineCommitHash = targetCommitHash;
+                report.baselineUsedFallback = baselineUsedFallback;
+                report.baselineLatestCommitHash = baselineLatestCommitHash;
                 try {
                     const githubService = new GitHubService();
                     baselinePRs = await githubService.findPRsByCommit(targetCommitHash);
@@ -96729,10 +96741,16 @@ var __webpack_exports__ = {};
             const currentCommitHash = githubService.getCurrentCommitHash();
             console.log(`Current commit hash: ${currentCommitHash}`);
             let targetCommitHash = null;
+            let baselineUsedFallback = false;
+            let baselineLatestCommitHash;
             if (isPullRequestEvent()) try {
                 console.log('🔍 Getting target branch commit hash...');
-                targetCommitHash = await githubService.getTargetBranchLatestCommit();
+                const commitInfo = await githubService.getTargetBranchLatestCommit();
+                targetCommitHash = commitInfo.commitHash;
+                baselineUsedFallback = commitInfo.usedFallbackCommit;
+                baselineLatestCommitHash = commitInfo.latestCommitHash;
                 console.log(`✅ Target branch commit hash: ${targetCommitHash}`);
+                if (baselineUsedFallback && baselineLatestCommitHash) console.log(`⚠️  Using fallback commit: ${targetCommitHash} (latest: ${baselineLatestCommitHash})`);
             } catch (error) {
                 console.error(`❌ Failed to get target branch commit: ${error}`);
                 console.log('📝 No baseline data available for comparison');
@@ -96776,14 +96794,19 @@ var __webpack_exports__ = {};
             } else if (isPR) {
                 console.log('📥 Detected pull request event - processing files');
                 for (const fullPath of matchedFiles){
-                    const report = await processSingleFile(fullPath, currentCommitHash, targetCommitHash);
+                    const report = await processSingleFile(fullPath, currentCommitHash, targetCommitHash, baselineUsedFallback, baselineLatestCommitHash);
                     projectReports.push(report);
                 }
                 if (projectReports.length > 0) if (1 === projectReports.length) {
                     const report = projectReports[0];
-                    if (report.current) await generateBundleAnalysisReport(report.current, report.baseline || void 0, true, report.baselineCommitHash, report.baselinePRs);
+                    if (report.current) {
+                        if (report.baselineUsedFallback && report.baselineLatestCommitHash) await core.summary.addRaw(`> ⚠️ **Note:** The latest commit (\`${report.baselineLatestCommitHash}\`) does not have baseline artifacts. Using commit \`${report.baselineCommitHash}\` for baseline comparison instead. If this seems incorrect, please wait a few minutes and try rerunning the workflow.\n\n`);
+                        await generateBundleAnalysisReport(report.current, report.baseline || void 0, true, report.baselineCommitHash, report.baselinePRs);
+                    }
                 } else {
                     await core.summary.addHeading('📦 Monorepo Bundle Analysis', 2);
+                    const firstReport = projectReports.find((r)=>r.current);
+                    if (firstReport?.baselineUsedFallback && firstReport?.baselineLatestCommitHash) await core.summary.addRaw(`> ⚠️ **Note:** The latest commit (\`${firstReport.baselineLatestCommitHash}\`) does not have baseline artifacts. Using commit \`${firstReport.baselineCommitHash}\` for baseline comparison instead. If this seems incorrect, please wait a few minutes and try rerunning the workflow.\n\n`);
                     for (const report of projectReports)if (report.current) {
                         await core.summary.addHeading(`📁 ${report.projectName}`, 3);
                         await core.summary.addRaw(`**Path:** \`${report.filePath}\``);
@@ -96795,7 +96818,28 @@ var __webpack_exports__ = {};
             if (isPR && projectReports.length > 0) {
                 const { context } = __webpack_require__("./node_modules/.pnpm/@actions+github@4.0.0/node_modules/@actions/github/lib/github.js");
                 let commentBody = '## Rsdoctor Bundle Diff Analysis\n\n';
-                if (projectReports.length > 1) commentBody += `Found ${projectReports.length} project(s) in monorepo.\n\n`;
+                const firstReport = projectReports.find((r)=>r.current);
+                if (firstReport?.baselineUsedFallback && firstReport?.baselineLatestCommitHash) commentBody += `> ⚠️ **Note:** The latest commit (\`${firstReport.baselineLatestCommitHash}\`) does not have baseline artifacts. Using commit \`${firstReport.baselineCommitHash}\` for baseline comparison instead. If this seems incorrect, please wait a few minutes and try rerunning the workflow.\n\n`;
+                const reportsWithCurrent = projectReports.filter((r)=>r.current);
+                if (reportsWithCurrent.length > 1) commentBody += `Found ${reportsWithCurrent.length} project(s) in monorepo.\n\n`;
+                if (reportsWithCurrent.length > 0) {
+                    commentBody += '<details>\n<summary><b>📊 Quick Summary</b> (Click to expand)</summary>\n\n';
+                    commentBody += '| Project | Total Size | Change |\n';
+                    commentBody += '|---------|------------|--------|\n';
+                    for (const report of reportsWithCurrent){
+                        if (!report.current) continue;
+                        const currentSize = report.current.totalSize;
+                        const baselineSize = report.baseline?.totalSize || 0;
+                        const diff = report.baseline ? calculateDiff(currentSize, baselineSize) : {
+                            value: '-',
+                            emoji: ''
+                        };
+                        const sizeStr = formatBytes(currentSize);
+                        commentBody += `| ${report.projectName} | ${sizeStr} | ${diff.emoji} ${diff.value} |\n`;
+                    }
+                    commentBody += '\n</details>\n\n';
+                }
+                if (reportsWithCurrent.length > 1) commentBody += '<details>\n<summary><b>📋 Detailed Reports</b> (Click to expand)</summary>\n\n';
                 for (const report of projectReports)if (report.current) {
                     commentBody += generateProjectMarkdown(report.projectName, report.filePath, report.current, report.baseline || void 0, report.baselineCommitHash, report.baselinePRs);
                     if (report.diffHtmlArtifactId) {
@@ -96803,6 +96847,7 @@ var __webpack_exports__ = {};
                         commentBody += `\n📦 **Download Diff Report**: [${report.projectName} Bundle Diff](${artifactDownloadLink})\n\n`;
                     }
                 }
+                if (reportsWithCurrent.length > 1) commentBody += '</details>\n\n';
                 commentBody += '*Generated by [Rsdoctor GitHub Action](https://rsdoctor.rs/guide/start/action)*';
                 try {
                     await githubService.updateOrCreateComment(context.payload.pull_request.number, commentBody);

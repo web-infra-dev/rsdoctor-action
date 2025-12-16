@@ -49,7 +49,7 @@ export interface BundleAnalysis {
   }>;
 }
 
-function formatBytes(bytes: number): string {
+export function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B';
   
   const k = 1024;
@@ -155,7 +155,7 @@ export function loadSizeData(filePath: string): SizeData | null {
   }
 }
 
-function calculateDiff(current: number, baseline: number): { value: string; emoji: string } {
+export function calculateDiff(current: number, baseline: number): { value: string; emoji: string } {
   if (!baseline || baseline === 0 || isNaN(baseline)) {
     return { value: 'N/A', emoji: '❓' };
   }

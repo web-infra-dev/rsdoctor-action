@@ -2,7 +2,7 @@ import { setFailed, getInput, summary } from '@actions/core';
 import { uploadArtifact, hashPath } from './upload';
 import { downloadArtifactByCommitHash } from './download';
 import { GitHubService } from './github';
-import { loadSizeData, generateSizeReport, parseRsdoctorData, generateBundleAnalysisReport, BundleAnalysis, generateProjectMarkdown } from './report';
+import { loadSizeData, generateSizeReport, parseRsdoctorData, generateBundleAnalysisReport, BundleAnalysis, generateProjectMarkdown, formatBytes, calculateDiff } from './report';
 import path from 'path';
 import * as fs from 'fs';
 import { execFile } from 'child_process';
@@ -84,6 +84,8 @@ interface ProjectReport {
   baselinePRs?: Array<{ number: number; title: string; url: string }>;
   diffHtmlPath?: string;
   diffHtmlArtifactId?: number;
+  baselineUsedFallback?: boolean;
+  baselineLatestCommitHash?: string;
 }
 
 function extractProjectName(filePath: string): string {
@@ -122,6 +124,8 @@ async function processSingleFile(
   fullPath: string,
   currentCommitHash: string,
   targetCommitHash: string | null,
+  baselineUsedFallback?: boolean,
+  baselineLatestCommitHash?: string,
 ): Promise<ProjectReport> {
   const fileName = path.basename(fullPath);
   const relativePath = path.relative(process.cwd(), fullPath);
@@ -162,6 +166,8 @@ async function processSingleFile(
       if (baselineBundleAnalysis) {
         report.baseline = baselineBundleAnalysis;
         report.baselineCommitHash = targetCommitHash;
+        report.baselineUsedFallback = baselineUsedFallback;
+        report.baselineLatestCommitHash = baselineLatestCommitHash;
         
         // Try to find associated PRs for the baseline commit
         try {
@@ -276,11 +282,20 @@ async function processSingleFile(
     console.log(`Current commit hash: ${currentCommitHash}`);
     
     let targetCommitHash: string | null = null;
+    let baselineUsedFallback = false;
+    let baselineLatestCommitHash: string | undefined = undefined;
+    
     if (isPullRequestEvent()) {
       try {
         console.log('🔍 Getting target branch commit hash...');
-        targetCommitHash = await githubService.getTargetBranchLatestCommit();
+        const commitInfo = await githubService.getTargetBranchLatestCommit();
+        targetCommitHash = commitInfo.commitHash;
+        baselineUsedFallback = commitInfo.usedFallbackCommit;
+        baselineLatestCommitHash = commitInfo.latestCommitHash;
         console.log(`✅ Target branch commit hash: ${targetCommitHash}`);
+        if (baselineUsedFallback && baselineLatestCommitHash) {
+          console.log(`⚠️  Using fallback commit: ${targetCommitHash} (latest: ${baselineLatestCommitHash})`);
+        }
       } catch (error) {
         console.error(`❌ Failed to get target branch commit: ${error}`);
         console.log('📝 No baseline data available for comparison');
@@ -351,7 +366,7 @@ async function processSingleFile(
       console.log('📥 Detected pull request event - processing files');
       
       for (const fullPath of matchedFiles) {
-        const report = await processSingleFile(fullPath, currentCommitHash, targetCommitHash);
+        const report = await processSingleFile(fullPath, currentCommitHash, targetCommitHash, baselineUsedFallback, baselineLatestCommitHash);
         projectReports.push(report);
       }
       
@@ -359,10 +374,20 @@ async function processSingleFile(
         if (projectReports.length === 1) {
           const report = projectReports[0];
           if (report.current) {
+            // Add fallback notice if applicable
+            if (report.baselineUsedFallback && report.baselineLatestCommitHash) {
+              await summary.addRaw(`> ⚠️ **Note:** The latest commit (\`${report.baselineLatestCommitHash}\`) does not have baseline artifacts. Using commit \`${report.baselineCommitHash}\` for baseline comparison instead. If this seems incorrect, please wait a few minutes and try rerunning the workflow.\n\n`);
+            }
             await generateBundleAnalysisReport(report.current, report.baseline || undefined, true, report.baselineCommitHash, report.baselinePRs);
           }
         } else {
           await summary.addHeading('📦 Monorepo Bundle Analysis', 2);
+          
+          // Add fallback notice if applicable (check first report)
+          const firstReport = projectReports.find(r => r.current);
+          if (firstReport?.baselineUsedFallback && firstReport?.baselineLatestCommitHash) {
+            await summary.addRaw(`> ⚠️ **Note:** The latest commit (\`${firstReport.baselineLatestCommitHash}\`) does not have baseline artifacts. Using commit \`${firstReport.baselineCommitHash}\` for baseline comparison instead. If this seems incorrect, please wait a few minutes and try rerunning the workflow.\n\n`);
+          }
           
           for (const report of projectReports) {
             if (!report.current) continue;
@@ -384,8 +409,39 @@ async function processSingleFile(
       
       let commentBody = '## Rsdoctor Bundle Diff Analysis\n\n';
       
-      if (projectReports.length > 1) {
-        commentBody += `Found ${projectReports.length} project(s) in monorepo.\n\n`;
+      // Add fallback notice if applicable (check first report)
+      const firstReport = projectReports.find(r => r.current);
+      if (firstReport?.baselineUsedFallback && firstReport?.baselineLatestCommitHash) {
+        commentBody += `> ⚠️ **Note:** The latest commit (\`${firstReport.baselineLatestCommitHash}\`) does not have baseline artifacts. Using commit \`${firstReport.baselineCommitHash}\` for baseline comparison instead. If this seems incorrect, please wait a few minutes and try rerunning the workflow.\n\n`;
+      }
+      
+      // Generate summary (always visible)
+      const reportsWithCurrent = projectReports.filter(r => r.current);
+      if (reportsWithCurrent.length > 1) {
+        commentBody += `Found ${reportsWithCurrent.length} project(s) in monorepo.\n\n`;
+      }
+      
+      // Generate summary table for quick overview
+      if (reportsWithCurrent.length > 0) {
+        commentBody += '<details>\n<summary><b>📊 Quick Summary</b> (Click to expand)</summary>\n\n';
+        commentBody += '| Project | Total Size | Change |\n';
+        commentBody += '|---------|------------|--------|\n';
+        
+        for (const report of reportsWithCurrent) {
+          if (!report.current) continue;
+          const currentSize = report.current.totalSize;
+          const baselineSize = report.baseline?.totalSize || 0;
+          const diff = report.baseline ? calculateDiff(currentSize, baselineSize) : { value: '-', emoji: '' };
+          const sizeStr = formatBytes(currentSize);
+          commentBody += `| ${report.projectName} | ${sizeStr} | ${diff.emoji} ${diff.value} |\n`;
+        }
+        
+        commentBody += '\n</details>\n\n';
+      }
+      
+      // Generate detailed reports (collapsed by default)
+      if (reportsWithCurrent.length > 1) {
+        commentBody += '<details>\n<summary><b>📋 Detailed Reports</b> (Click to expand)</summary>\n\n';
       }
       
       for (const report of projectReports) {
@@ -398,6 +454,10 @@ async function processSingleFile(
           const artifactDownloadLink = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}/artifacts/${report.diffHtmlArtifactId}`;
           commentBody += `\n📦 **Download Diff Report**: [${report.projectName} Bundle Diff](${artifactDownloadLink})\n\n`;
         }
+      }
+      
+      if (reportsWithCurrent.length > 1) {
+        commentBody += '</details>\n\n';
       }
       
       commentBody += '*Generated by [Rsdoctor GitHub Action](https://rsdoctor.rs/guide/start/action)*';
