@@ -62,9 +62,9 @@ jobs:
           cd ../rsbuild-demo2
           pnpm run build
           
-      # - name: Report Compressed Size
-      #   uses: ./
-      #   with:
-      #     github_token: ${{ secrets.GITHUB_TOKEN }}
-      #     file_path: 'examples/**/*/.rsdoctor/rsdoctor-data.json'
-      #     target_branch: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref || github.event.repository.default_branch }}
+      - name: Report Compressed Size
+        uses: ./
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          file_path: 'examples/**/*/.rsdoctor/rsdoctor-data.json'
+          target_branch: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref || github.event.repository.default_branch }}
