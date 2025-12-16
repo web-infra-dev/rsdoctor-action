@@ -77,10 +77,63 @@ export class GitHubService {
     return runsResponse.data;
   }
 
+  /**
+   * Check if a commit has any artifacts by checking its workflow runs
+   */
+  async hasArtifactsForCommit(commitHash: string): Promise<boolean> {
+    try {
+      const workflowRuns = await this.findAllWorkflowRunsByCommit(commitHash);
+      
+      for (const workflowRun of workflowRuns) {
+        try {
+          const runArtifacts = await this.listArtifactsForWorkflowRun(workflowRun.id);
+          if (runArtifacts.artifacts && runArtifacts.artifacts.length > 0) {
+            return true;
+          }
+        } catch (error) {
+          // Continue checking other workflow runs
+          continue;
+        }
+      }
+      
+      return false;
+    } catch (error) {
+      // If we can't check, assume no artifacts
+      return false;
+    }
+  }
+
+  /**
+   * Get parent commit hash
+   */
+  async getParentCommit(commitHash: string): Promise<string | null> {
+    const { owner, repo } = this.repository;
+    
+    try {
+      const commitResponse = await this.octokit.rest.repos.getCommit({
+        owner,
+        repo,
+        ref: commitHash
+      });
+      
+      if (commitResponse.data.parents && commitResponse.data.parents.length > 0) {
+        return commitResponse.data.parents[0].sha.substring(0, 10);
+      }
+      
+      return null;
+    } catch (error) {
+      const apiError = error as ApiError;
+      console.warn(`⚠️  Failed to get parent commit for ${commitHash}: ${apiError.message}`);
+      return null;
+    }
+  }
+
   async getTargetBranchLatestCommit(): Promise<string> {
     const targetBranch = this.getTargetBranch();
     console.log(`🔍 Attempting to get latest commit for target branch: ${targetBranch}`);
     console.log(`📋 Repository: ${this.repository.owner}/${this.repository.repo}`);
+    
+    let latestCommitHash: string | null = null;
     
     try {
       console.log(`📡 Trying to get latest commit from GitHub API...`);
@@ -94,9 +147,8 @@ export class GitHubService {
         });
         
         if (branchResponse.data && branchResponse.data.commit) {
-          const commitHash = branchResponse.data.commit.sha.substring(0, 10);
-          console.log(`✅ Found commit hash from GitHub API: ${commitHash}`);
-          return commitHash;
+          latestCommitHash = branchResponse.data.commit.sha.substring(0, 10);
+          console.log(`✅ Found commit hash from GitHub API: ${latestCommitHash}`);
         }
       } catch (error) {
         const apiError = error as ApiError;
@@ -114,9 +166,9 @@ export class GitHubService {
               });
               
               if (altResponse.data && altResponse.data.commit) {
-                const commitHash = altResponse.data.commit.sha.substring(0, 10);
-                console.log(`✅ Found commit hash from alternative branch ${altBranch}: ${commitHash}`);
-                return commitHash;
+                latestCommitHash = altResponse.data.commit.sha.substring(0, 10);
+                console.log(`✅ Found commit hash from alternative branch ${altBranch}: ${latestCommitHash}`);
+                break;
               }
             } catch (error) {
               const altError = error as ApiError;
@@ -126,59 +178,115 @@ export class GitHubService {
         }
       }
 
-      console.log(`📋 Trying to get from workflow runs...`);
-      try {
-        const runs = await this.listWorkflowRuns({
-          branch: targetBranch,
-          status: 'completed',
-          limit: 10
-        });
-
-        if (runs.workflow_runs && runs.workflow_runs.length > 0) {
-          console.log(`Found ${runs.workflow_runs.length} workflow runs for ${targetBranch}`);
-          
-          const successfulRun = runs.workflow_runs.find((run: WorkflowRun) => run.conclusion === 'success');
-          if (successfulRun) {
-            console.log(`✅ Found successful workflow run for ${targetBranch}: ${successfulRun.head_sha}`);
-            return successfulRun.head_sha.substring(0, 10);
-          }
-          
-          const latestRun = runs.workflow_runs[0] as WorkflowRun;
-          console.log(`⚠️  No successful runs found, using latest workflow run for ${targetBranch}: ${latestRun.head_sha}`);
-          return latestRun.head_sha.substring(0, 10);
-        }
-      } catch (error) {
-        const workflowError = error as ApiError;
-        console.warn(`⚠️  Failed to get workflow runs: ${workflowError.message}`);
-      }
-
-      console.log(`🔧 No workflow runs found for ${targetBranch}, trying to fetch from remote...`);
-      try {
-        console.log(`📥 Running: git fetch origin`);
-        execSync('git fetch origin', { encoding: 'utf8' });
-        
-        console.log(`📥 Running: git rev-parse --short=10 origin/${targetBranch}`);
-        const commitHash = execSync(`git rev-parse --short=10 origin/${targetBranch}`, { encoding: 'utf8' }).trim();
-        console.log(`✅ Found commit hash from git: ${commitHash}`);
-        return commitHash;
-      } catch (gitError) {
-        console.warn(`❌ Git fetch failed: ${gitError}`);
-        
+      if (!latestCommitHash) {
+        console.log(`📋 Trying to get from workflow runs...`);
         try {
-          console.log(`📥 Trying alternative: git ls-remote origin ${targetBranch}`);
-          const remoteRef = execSync(`git ls-remote origin ${targetBranch}`, { encoding: 'utf8' }).trim();
-          if (remoteRef) {
-            const commitHash = remoteRef.split('\t')[0].substring(0, 10);
-            console.log(`✅ Found commit hash from git ls-remote: ${commitHash}`);
-            return commitHash;
+          const runs = await this.listWorkflowRuns({
+            branch: targetBranch,
+            status: 'completed',
+            limit: 10
+          });
+
+          if (runs.workflow_runs && runs.workflow_runs.length > 0) {
+            console.log(`Found ${runs.workflow_runs.length} workflow runs for ${targetBranch}`);
+            
+            const successfulRun = runs.workflow_runs.find((run: WorkflowRun) => run.conclusion === 'success');
+            if (successfulRun) {
+              latestCommitHash = successfulRun.head_sha.substring(0, 10);
+              console.log(`✅ Found successful workflow run for ${targetBranch}: ${latestCommitHash}`);
+            } else {
+              const latestRun = runs.workflow_runs[0] as WorkflowRun;
+              latestCommitHash = latestRun.head_sha.substring(0, 10);
+              console.log(`⚠️  No successful runs found, using latest workflow run for ${targetBranch}: ${latestCommitHash}`);
+            }
           }
-        } catch (altError) {
-          console.warn(`❌ Alternative git command failed: ${altError}`);
+        } catch (error) {
+          const workflowError = error as ApiError;
+          console.warn(`⚠️  Failed to get workflow runs: ${workflowError.message}`);
         }
       }
 
-      console.error(`❌ All methods to get target branch commit have failed`);
-      throw new Error(`Unable to get target branch (${targetBranch}) commit hash. Please ensure the branch exists and you have correct permissions.`);
+      if (!latestCommitHash) {
+        console.log(`🔧 No workflow runs found for ${targetBranch}, trying to fetch from remote...`);
+        try {
+          console.log(`📥 Running: git fetch origin`);
+          execSync('git fetch origin', { encoding: 'utf8' });
+          
+          console.log(`📥 Running: git rev-parse --short=10 origin/${targetBranch}`);
+          latestCommitHash = execSync(`git rev-parse --short=10 origin/${targetBranch}`, { encoding: 'utf8' }).trim();
+          console.log(`✅ Found commit hash from git: ${latestCommitHash}`);
+        } catch (gitError) {
+          console.warn(`❌ Git fetch failed: ${gitError}`);
+          
+          try {
+            console.log(`📥 Trying alternative: git ls-remote origin ${targetBranch}`);
+            const remoteRef = execSync(`git ls-remote origin ${targetBranch}`, { encoding: 'utf8' }).trim();
+            if (remoteRef) {
+              latestCommitHash = remoteRef.split('\t')[0].substring(0, 10);
+              console.log(`✅ Found commit hash from git ls-remote: ${latestCommitHash}`);
+            }
+          } catch (altError) {
+            console.warn(`❌ Alternative git command failed: ${altError}`);
+          }
+        }
+      }
+
+      if (!latestCommitHash) {
+        console.error(`❌ All methods to get target branch commit have failed`);
+        throw new Error(`Unable to get target branch (${targetBranch}) commit hash. Please ensure the branch exists and you have correct permissions.`);
+      }
+
+      // Check if the latest commit has artifacts, if not, look for previous commits
+      console.log(`🔍 Checking if commit ${latestCommitHash} has baseline artifacts...`);
+      const hasArtifacts = await this.hasArtifactsForCommit(latestCommitHash);
+      
+      if (hasArtifacts) {
+        console.log(`✅ Commit ${latestCommitHash} has baseline artifacts`);
+        return latestCommitHash;
+      }
+
+      // Latest commit doesn't have artifacts, look for previous commits
+      console.log(`⚠️  Commit ${latestCommitHash} does not have baseline artifacts`);
+      console.log(`🔍 Looking for previous commits with baseline artifacts...`);
+      
+      let currentCommit = latestCommitHash;
+      let checkedCommits: string[] = [currentCommit];
+      const maxDepth = 5;
+      
+      for (let depth = 0; depth < maxDepth; depth++) {
+        const parentCommit = await this.getParentCommit(currentCommit);
+        
+        if (!parentCommit) {
+          console.log(`⚠️  Reached the beginning of the branch, no more parent commits`);
+          break;
+        }
+        
+        if (checkedCommits.includes(parentCommit)) {
+          console.log(`⚠️  Detected circular reference, stopping search`);
+          break;
+        }
+        
+        checkedCommits.push(parentCommit);
+        console.log(`🔍 Checking parent commit ${parentCommit}...`);
+        
+        const parentHasArtifacts = await this.hasArtifactsForCommit(parentCommit);
+        
+        if (parentHasArtifacts) {
+          console.log(`✅ Found commit ${parentCommit} with baseline artifacts`);
+          console.log(`\n⚠️  Note: The latest commit (${latestCommitHash}) does not have baseline artifacts.`);
+          console.log(`   Using commit ${parentCommit} for baseline comparison instead.`);
+          console.log(`   If this seems incorrect, please wait a few minutes and try rerunning the workflow.`);
+          return parentCommit;
+        }
+        
+        currentCommit = parentCommit;
+      }
+      
+      // No commits with artifacts found
+      console.log(`\n⚠️  No commits with baseline artifacts found in the last ${maxDepth} commits.`);
+      console.log(`   Using latest commit ${latestCommitHash} anyway.`);
+      console.log(`   Note: If baseline comparison fails, please wait a few minutes and try rerunning the workflow.`);
+      return latestCommitHash;
       
     } catch (error) {
       console.error(`❌ Failed to get target branch commit: ${error}`);
