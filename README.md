@@ -66,6 +66,19 @@ export default defineConfig({
 - `target_branch`: If you want to use a dynamic target branch (e.g., the PR base branch instead of a fixed main), use:
   `target_branch: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref || github.event.repository.default_branch }}`
 
+### Event Types
+
+The action supports three event types:
+
+1. **`pull_request`**: Compares the PR branch with the target branch baseline. Uploads artifacts and generates PR comments with bundle diff analysis.
+
+2. **`push`**: When pushing to the target branch (e.g., `main`), uploads artifacts for future comparisons. Does not perform baseline comparison.
+
+3. **`workflow_dispatch`**: Manually triggered workflow. Behaves like a combination of `push` and `pull_request`:
+   - Uploads artifacts (like `push` events)
+   - Performs baseline comparison if `target_branch` is provided (like `pull_request` events)
+   - Generates bundle analysis reports in GitHub Actions summary
+
 - Example
 
 ```yaml
@@ -77,6 +90,7 @@ on:
   push:
     branches:
       - main  # or your target branch name
+  workflow_dispatch:  # Allow manual triggering
 
 jobs:
   bundle-analysis:

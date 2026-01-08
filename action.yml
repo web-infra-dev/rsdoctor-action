@@ -15,6 +15,11 @@ inputs:
     description: 'The target branch to compare against (defaults to main)'
     required: false
     default: 'main'
+  dispatch_target_branch:
+    description: 'Override target branch when triggered by workflow_dispatch'
+    required: false
+    default: ''
+    type: string
 
 runs:
   using: 'node20'

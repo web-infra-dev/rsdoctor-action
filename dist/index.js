@@ -96583,6 +96583,16 @@ var __webpack_exports__ = {};
         }
         return false;
     }
+    function isWorkflowDispatchEvent() {
+        const { context } = __webpack_require__("./node_modules/.pnpm/@actions+github@4.0.0/node_modules/@actions/github/lib/github.js");
+        const isDispatch = 'workflow_dispatch' === context.eventName;
+        if (isDispatch) {
+            console.log(`🔧 Detected workflow_dispatch event`);
+            console.log("   This is a manually triggered workflow");
+            return true;
+        }
+        return false;
+    }
     function runRsdoctorViaNode(requirePath, args = []) {
         const nodeExec = process.execPath;
         console.log('process.execPath =', nodeExec);
@@ -96751,7 +96761,10 @@ var __webpack_exports__ = {};
             let targetCommitHash = null;
             let baselineUsedFallback = false;
             let baselineLatestCommitHash;
-            if (isPullRequestEvent()) try {
+            const isPush = isPushEvent();
+            const isPR = isPullRequestEvent();
+            const isDispatch = isWorkflowDispatchEvent();
+            if (isPR || isDispatch) try {
                 console.log('🔍 Getting target branch commit hash...');
                 const commitInfo = await githubService.getTargetBranchLatestCommit();
                 targetCommitHash = commitInfo.commitHash;
@@ -96763,8 +96776,6 @@ var __webpack_exports__ = {};
                 console.error(`❌ Failed to get target branch commit: ${error}`);
                 console.log('📝 No baseline data available for comparison');
             }
-            const isPush = isPushEvent();
-            const isPR = isPullRequestEvent();
             const projectReports = [];
             if (isPush) {
                 console.log('🔄 Detected push event to target branch - uploading artifacts');
@@ -96799,11 +96810,17 @@ var __webpack_exports__ = {};
                     }
                     await core.summary.write();
                 }
-            } else if (isPR) {
-                console.log('📥 Detected pull request event - processing files');
+            } else if (isDispatch || isPR) {
+                if (isDispatch) console.log('🔧 Processing workflow_dispatch event - uploading artifacts and comparing with baseline');
+                else console.log('📥 Detected pull request event - processing files');
                 for (const fullPath of matchedFiles){
                     const report = await processSingleFile(fullPath, currentCommitHash, targetCommitHash, baselineUsedFallback, baselineLatestCommitHash);
                     projectReports.push(report);
+                    if (isDispatch) {
+                        const uploadResponse = await uploadArtifact(fullPath, currentCommitHash);
+                        if ('number' != typeof uploadResponse.id) console.warn(`⚠️ Artifact upload failed for ${fullPath}`);
+                        else console.log(`✅ Successfully uploaded artifact with ID: ${uploadResponse.id}`);
+                    }
                 }
                 if (projectReports.length > 0) if (1 === projectReports.length) {
                     const report = projectReports[0];
@@ -96914,8 +96931,8 @@ var __webpack_exports__ = {};
                     console.warn(`⚠️ Failed to add/update comment to PR: ${commentError}`);
                 }
             }
-            if (!isPush && !isPR) {
-                console.log('ℹ️ Skipping artifact operations - this action only runs on push events (to target branch) and pull requests');
+            if (!isPush && !isPR && !isDispatch) {
+                console.log('ℹ️ Skipping artifact operations - this action only runs on push events (to target branch), pull requests, and workflow_dispatch');
                 console.log('Current event:', process.env.GITHUB_EVENT_NAME);
                 return;
             }
