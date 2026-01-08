@@ -95693,8 +95693,9 @@ var __webpack_exports__ = {};
             }).trim();
         }
         getTargetBranch() {
+            const dispatchTargetBranch = (0, core.getInput)('dispatch_target_branch');
             const targetBranch = (0, core.getInput)('target_branch') || 'main';
-            return targetBranch;
+            return dispatchTargetBranch || targetBranch;
         }
         async listWorkflowRuns(params) {
             const { owner, repo } = this.repository;

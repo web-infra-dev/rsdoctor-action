@@ -59,8 +59,9 @@ export class GitHubService {
   }
 
   getTargetBranch(): string {
+    const dispatchTargetBranch = getInput('dispatch_target_branch');
     const targetBranch = getInput('target_branch') || 'main';
-    return targetBranch;
+    return dispatchTargetBranch || targetBranch;
   }
 
   async listWorkflowRuns(params: WorkflowRunParams) {
