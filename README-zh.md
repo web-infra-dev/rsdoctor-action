@@ -45,7 +45,7 @@ export default defineConfig({
 ### 2. 配置 workflow
 
 ```yaml
-- uses: web-infra-dev/rsdoctor-actions@main
+- uses: web-infra-dev/rsdoctor-action@main
   with:
     # Rsdoctor JSON 数据文件路径（相对于项目根目录）
     file_path: 'dist/.rsdoctor/rsdoctor-data.json'
@@ -120,7 +120,7 @@ jobs:
         run: npm run build
       
       - name: Bundle Analysis
-        uses: web-infra-dev/rsdoctor-actions@main
+        uses: web-infra-dev/rsdoctor-action@main
         with:
           file_path: 'dist/.rsdoctor/rsdoctor-data.json'
           target_branch: 'main'

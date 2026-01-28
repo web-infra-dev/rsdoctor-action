@@ -28,7 +28,7 @@
     "type": "git",
     "url": "https://github.com/web-infra-dev/rsdoctor-action.git"
   },
-  "homepage": "https://github.com/web-infra-dev/rsdoctor-actions#readme",
+  "homepage": "https://github.com/web-infra-dev/rsdoctor-action#readme",
   "bugs": {
     "url": "https://github.com/web-infra-dev/rsdoctor-action/issues"
   },
