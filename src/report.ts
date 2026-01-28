@@ -49,6 +49,19 @@ export interface BundleAnalysis {
   }>;
 }
 
+function toGitHubRedirectUrl(url: string): string {
+  // Keep link clickable but avoid GitHub auto-associating PR references in comments.
+  // Example: https://github.com/org/repo/pull/123 -> https://redirect.github.com/org/repo/pull/123
+  if (!url) return url;
+  if (url.startsWith('https://redirect.github.com/')) return url;
+  try {
+    const u = new URL(url);
+    return `https://redirect.github.com${u.pathname}${u.search}${u.hash}`;
+  } catch {
+    return url;
+  }
+}
+
 export function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B';
   
@@ -210,7 +223,9 @@ export function generateProjectMarkdown(
     
     // Add PR links if available
     if (baselinePRs && baselinePRs.length > 0) {
-      const prLinks = baselinePRs.map(pr => `[#${pr.number}](${pr.url})`).join(', ');
+      const prLinks = baselinePRs
+        .map(pr => `[#${pr.number}](${toGitHubRedirectUrl(pr.url)})`)
+        .join(', ');
       baselineInfo += ` | **PR:** ${prLinks}`;
     }
     
@@ -247,7 +262,9 @@ export async function generateBundleAnalysisReport(
       
       // Add PR links if available
       if (baselinePRs && baselinePRs.length > 0) {
-        const prLinks = baselinePRs.map(pr => `[#${pr.number}](${pr.url})`).join(', ');
+        const prLinks = baselinePRs
+          .map(pr => `[#${pr.number}](${toGitHubRedirectUrl(pr.url)})`)
+          .join(', ');
         baselineInfo += ` | **PR:** ${prLinks}`;
       }
       

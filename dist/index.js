@@ -16019,13 +16019,13 @@ The following characters are not allowed in files that are uploaded due to limit
             listEnumValues: ()=>listEnumValues,
             assertNever: ()=>assert.xb,
             mergeBinaryOptions: ()=>binary_format_contract.Ix,
+            reflectionScalarDefault: ()=>reflectionScalarDefault,
             lowerCamelCase: ()=>lower_camel_case.W,
             PbULong: ()=>PbULong,
             LongType: ()=>reflection_info_LongType,
             MessageType: ()=>MessageType,
             ScalarType: ()=>reflection_info_ScalarType,
             readFieldOptions: ()=>readFieldOptions,
-            reflectionScalarDefault: ()=>reflectionScalarDefault,
             WireType: ()=>binary_format_contract.O0,
             containsMessageType: ()=>containsMessageType,
             listEnumNumbers: ()=>listEnumNumbers,
@@ -96206,6 +96206,16 @@ var __webpack_exports__ = {};
             throw downloadError;
         }
     }
+    function toGitHubRedirectUrl(url) {
+        if (!url) return url;
+        if (url.startsWith('https://redirect.github.com/')) return url;
+        try {
+            const u = new URL(url);
+            return `https://redirect.github.com${u.pathname}${u.search}${u.hash}`;
+        } catch  {
+            return url;
+        }
+    }
     function formatBytes(bytes) {
         if (0 === bytes) return '0 B';
         const k = 1024;
@@ -96335,7 +96345,7 @@ var __webpack_exports__ = {};
                 const commitLink = `${process.env.GITHUB_SERVER_URL || 'https://github.com'}/${process.env.GITHUB_REPOSITORY}/commit/${baselineCommitHash}`;
                 let baselineInfo = `> 📌 **Baseline Commit:** [\`${baselineCommitHash}\`](${commitLink})`;
                 if (baselinePRs && baselinePRs.length > 0) {
-                    const prLinks = baselinePRs.map((pr)=>`[#${pr.number}](${pr.url})`).join(', ');
+                    const prLinks = baselinePRs.map((pr)=>`[#${pr.number}](${toGitHubRedirectUrl(pr.url)})`).join(', ');
                     baselineInfo += ` | **PR:** ${prLinks}`;
                 }
                 markdown += `${baselineInfo}\n\n`;
@@ -96357,7 +96367,7 @@ var __webpack_exports__ = {};
                 const commitLink = `${process.env.GITHUB_SERVER_URL || 'https://github.com'}/${process.env.GITHUB_REPOSITORY}/commit/${baselineCommitHash}`;
                 let baselineInfo = `> 📌 **Baseline Commit:** [\`${baselineCommitHash}\`](${commitLink})`;
                 if (baselinePRs && baselinePRs.length > 0) {
-                    const prLinks = baselinePRs.map((pr)=>`[#${pr.number}](${pr.url})`).join(', ');
+                    const prLinks = baselinePRs.map((pr)=>`[#${pr.number}](${toGitHubRedirectUrl(pr.url)})`).join(', ');
                     baselineInfo += ` | **PR:** ${prLinks}`;
                 }
                 await core.summary.addRaw(baselineInfo);
