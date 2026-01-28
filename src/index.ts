@@ -437,10 +437,6 @@ async function processSingleFile(
       const { context } = require('@actions/github');
       
       let commentBody = '## Rsdoctor Bundle Diff Analysis\n\n';
-
-      // Example PR/MR link (use redirect.github.com to avoid auto-association)
-      const repoSlug = process.env.GITHUB_REPOSITORY || 'OWNER/REPO';
-      commentBody += `> 🧪 **Example PR/MR:** [#19](https://redirect.github.com/${repoSlug}/pull/19)\n\n`;
       
       // Add fallback notice if applicable (check first report)
       const firstReport = projectReports.find(r => r.current);
