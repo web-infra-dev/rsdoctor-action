@@ -96854,6 +96854,8 @@ var __webpack_exports__ = {};
             if (isPR && projectReports.length > 0) {
                 const { context } = __webpack_require__("./node_modules/.pnpm/@actions+github@4.0.0/node_modules/@actions/github/lib/github.js");
                 let commentBody = '## Rsdoctor Bundle Diff Analysis\n\n';
+                const repoSlug = process.env.GITHUB_REPOSITORY || 'OWNER/REPO';
+                commentBody += `> 🧪 **Example PR/MR:** [#19](https://redirect.github.com/${repoSlug}/pull/19)\n\n`;
                 const firstReport = projectReports.find((r)=>r.current);
                 if (firstReport?.baselineUsedFallback && firstReport?.baselineLatestCommitHash) commentBody += `> ⚠️ **Note:** The latest commit (\`${firstReport.baselineLatestCommitHash}\`) does not have baseline artifacts. Using commit \`${firstReport.baselineCommitHash}\` for baseline comparison instead. If this seems incorrect, please wait a few minutes and try rerunning the workflow.\n\n`;
                 const reportsWithCurrent = projectReports.filter((r)=>r.current);
