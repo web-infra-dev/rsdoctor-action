@@ -16019,13 +16019,13 @@ The following characters are not allowed in files that are uploaded due to limit
             listEnumValues: ()=>listEnumValues,
             assertNever: ()=>assert.xb,
             mergeBinaryOptions: ()=>binary_format_contract.Ix,
-            reflectionScalarDefault: ()=>reflectionScalarDefault,
             lowerCamelCase: ()=>lower_camel_case.W,
             PbULong: ()=>PbULong,
             LongType: ()=>reflection_info_LongType,
             MessageType: ()=>MessageType,
             ScalarType: ()=>reflection_info_ScalarType,
             readFieldOptions: ()=>readFieldOptions,
+            reflectionScalarDefault: ()=>reflectionScalarDefault,
             WireType: ()=>binary_format_contract.O0,
             containsMessageType: ()=>containsMessageType,
             listEnumNumbers: ()=>listEnumNumbers,
@@ -95662,9 +95662,8 @@ var __webpack_exports__ = {};
         const relativePath = external_path_default().relative(process.cwd(), targetFilePath);
         const pathParts = relativePath.split(external_path_default().sep);
         const fileNameWithoutExt = external_path_default().parse(fileName).name;
-        const fileExt = external_path_default().parse(fileName).ext;
         const pathHash = hashPath(pathParts, fileNameWithoutExt);
-        const artifactName = `${pathHash}-${hash}${fileExt}`;
+        const artifactName = `${pathHash}-${hash}`;
         console.log(`Uploading artifact: ${artifactName}`);
         console.log(`From file: ${targetFilePath}`);
         const uploadResponse = await artifactClient.uploadArtifact(artifactName, [
@@ -96130,9 +96129,8 @@ var __webpack_exports__ = {};
         const relativePath = external_path_default().relative(process.cwd(), filePath);
         const pathParts = relativePath.split(external_path_default().sep);
         const fileNameWithoutExt = external_path_default().parse(fileName).name;
-        const fileExt = external_path_default().parse(fileName).ext;
         const pathHash = hashPath(pathParts, fileNameWithoutExt);
-        const expectedArtifactName = `${pathHash}-${commitHash}${fileExt}`;
+        const expectedArtifactName = `${pathHash}-${commitHash}`;
         console.log(`📋 Searching for artifact with path hash and commit hash: ${expectedArtifactName}`);
         console.log(`   Path hash: ${pathHash}`);
         console.log(`   File path: ${relativePath}`);

@@ -104,9 +104,8 @@ export async function downloadArtifactByCommitHash(
   const relativePath = path.relative(process.cwd(), filePath);
   const pathParts = relativePath.split(path.sep);
   const fileNameWithoutExt = path.parse(fileName).name;
-  const fileExt = path.parse(fileName).ext;
   const pathHash = hashPath(pathParts, fileNameWithoutExt);
-  const expectedArtifactName = `${pathHash}-${commitHash}${fileExt}`;
+  const expectedArtifactName = `${pathHash}-${commitHash}`;
   
   console.log(`📋 Searching for artifact with path hash and commit hash: ${expectedArtifactName}`);
   console.log(`   Path hash: ${pathHash}`);
