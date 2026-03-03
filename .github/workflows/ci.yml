@@ -5,7 +5,7 @@ on:
     types: [opened, synchronize, reopened]
   push:
     branches:
-      - main
+      - ['main', 'test/main3']
   workflow_dispatch:
     inputs:
       target_branch:
