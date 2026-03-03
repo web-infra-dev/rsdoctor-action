@@ -38,21 +38,6 @@ const App = () => {
           <p>Full support for React 18+ with concurrent features.</p>
         </div>
       </div>
-
-      <div className="info-section">
-        <div className="feature-card">
-          <h3>Fast Build</h3>
-          <p>Rsbuild provides lightning-fast build times with modern tooling.</p>
-        </div>
-        <div className="feature-card">
-          <h3>TypeScript Support</h3>
-          <p>Built-in TypeScript support with excellent developer experience.</p>
-        </div>
-        <div className="feature-card">
-          <h3>Modern React</h3>
-          <p>Full support for React 18+ with concurrent features.</p>
-        </div>
-      </div>
       
       <div className="stats-container">
         <div className="stat-item">
