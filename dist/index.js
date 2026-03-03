@@ -95662,9 +95662,8 @@ var __webpack_exports__ = {};
         const relativePath = external_path_default().relative(process.cwd(), targetFilePath);
         const pathParts = relativePath.split(external_path_default().sep);
         const fileNameWithoutExt = external_path_default().parse(fileName).name;
-        const fileExt = external_path_default().parse(fileName).ext;
         const pathHash = hashPath(pathParts, fileNameWithoutExt);
-        const artifactName = `${pathHash}-${hash}${fileExt}`;
+        const artifactName = `${pathHash}-${hash}`;
         console.log(`Uploading artifact: ${artifactName}`);
         console.log(`From file: ${targetFilePath}`);
         const uploadResponse = await artifactClient.uploadArtifact(artifactName, [
@@ -96132,7 +96131,8 @@ var __webpack_exports__ = {};
         const fileNameWithoutExt = external_path_default().parse(fileName).name;
         const fileExt = external_path_default().parse(fileName).ext;
         const pathHash = hashPath(pathParts, fileNameWithoutExt);
-        const expectedArtifactName = `${pathHash}-${commitHash}${fileExt}`;
+        const expectedArtifactName = `${pathHash}-${commitHash}`;
+        const legacyArtifactName = `${pathHash}-${commitHash}${fileExt}`;
         console.log(`📋 Searching for artifact with path hash and commit hash: ${expectedArtifactName}`);
         console.log(`   Path hash: ${pathHash}`);
         console.log(`   File path: ${relativePath}`);
@@ -96147,7 +96147,7 @@ var __webpack_exports__ = {};
                 console.log(`   Status: ${workflowRun.status}, Conclusion: ${workflowRun.conclusion}`);
                 try {
                     const runArtifacts = await githubService.listArtifactsForWorkflowRun(workflowRun.id);
-                    const foundArtifact = runArtifacts.artifacts?.find((a)=>a.name === expectedArtifactName);
+                    const foundArtifact = runArtifacts.artifacts?.find((a)=>a.name === expectedArtifactName || a.name === legacyArtifactName);
                     if (foundArtifact) {
                         artifact = foundArtifact;
                         artifacts = runArtifacts;
@@ -96173,7 +96173,7 @@ var __webpack_exports__ = {};
         }
         if (!artifact) {
             artifacts = await githubService.listArtifacts();
-            artifact = artifacts.artifacts.find((a)=>a.name === expectedArtifactName);
+            artifact = artifacts.artifacts.find((a)=>a.name === expectedArtifactName || a.name === legacyArtifactName);
         }
         if (!artifact) {
             console.log(`❌ No artifact found matching: ${expectedArtifactName}`);

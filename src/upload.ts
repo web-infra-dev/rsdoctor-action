@@ -11,23 +11,22 @@ export function hashPath(pathParts: string[], fileNameWithoutExt: string): strin
 
 export async function uploadArtifact(filePath: string, commitHash?: string) {
   const artifactClient = new DefaultArtifactClient();
-  
+
   const hash = commitHash || execSync('git rev-parse --short=10 HEAD', { encoding: 'utf8' }).trim();
-  
+
   const targetFilePath = filePath;
-  
+
   if (!targetFilePath || !fs.existsSync(targetFilePath)) {
     throw new Error(`Target file not found: ${targetFilePath}`);
   }
   const fileName = path.basename(targetFilePath);
-  
+
   const relativePath = path.relative(process.cwd(), targetFilePath);
   const pathParts = relativePath.split(path.sep);
   const fileNameWithoutExt = path.parse(fileName).name;
-  const fileExt = path.parse(fileName).ext;
-  
+
   const pathHash = hashPath(pathParts, fileNameWithoutExt);
-  const artifactName = `${pathHash}-${hash}${fileExt}`;
+  const artifactName = `${pathHash}-${hash}`;
   
   console.log(`Uploading artifact: ${artifactName}`);
   console.log(`From file: ${targetFilePath}`);
