@@ -95640,6 +95640,10 @@ function __webpack_require__(moduleId) {
 var __webpack_exports__ = {};
 (()=>{
     "use strict";
+    __webpack_require__.r(__webpack_exports__);
+    __webpack_require__.d(__webpack_exports__, {
+        extractProjectName: ()=>extractProjectName
+    });
     var core = __webpack_require__("./node_modules/.pnpm/@actions+core@1.11.1/node_modules/@actions/core/lib/core.js");
     var lib_artifact = __webpack_require__("./node_modules/.pnpm/@actions+artifact@2.3.2/node_modules/@actions/artifact/lib/artifact.js");
     var external_path_ = __webpack_require__("path");
@@ -96636,9 +96640,21 @@ var __webpack_exports__ = {};
             'examples'
         ];
         const patternIndex = pathParts.findIndex((part)=>monorepoPatterns.includes(part));
-        if (patternIndex >= 0 && patternIndex + 1 < pathParts.length) for(let i = patternIndex + 1; i < pathParts.length; i++){
-            const part = pathParts[i];
-            if (!buildOutputDirs.includes(part)) return part;
+        if (patternIndex >= 0 && patternIndex + 1 < pathParts.length) {
+            let packageName = null;
+            let packageNameIndex = -1;
+            for(let i = patternIndex + 1; i < pathParts.length; i++)if (!buildOutputDirs.includes(pathParts[i])) {
+                packageName = pathParts[i];
+                packageNameIndex = i;
+                break;
+            }
+            if (packageName) {
+                for(let i = pathParts.length - 2; i > packageNameIndex; i--){
+                    const part = pathParts[i];
+                    if (!buildOutputDirs.includes(part)) return `${packageName}/${part}`;
+                }
+                return packageName;
+            }
         }
         for(let i = pathParts.length - 2; i >= 0; i--){
             const part = pathParts[i];
@@ -96953,7 +96969,10 @@ var __webpack_exports__ = {};
         }
     })();
 })();
-for(var __webpack_i__ in __webpack_exports__)exports[__webpack_i__] = __webpack_exports__[__webpack_i__];
+exports.extractProjectName = __webpack_exports__.extractProjectName;
+for(var __webpack_i__ in __webpack_exports__)if (-1 === [
+    "extractProjectName"
+].indexOf(__webpack_i__)) exports[__webpack_i__] = __webpack_exports__[__webpack_i__];
 Object.defineProperty(exports, '__esModule', {
     value: true
 });

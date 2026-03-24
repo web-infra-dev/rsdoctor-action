@@ -101,7 +101,7 @@ interface ProjectReport {
   baselineLatestCommitHash?: string;
 }
 
-function extractProjectName(filePath: string): string {
+export function extractProjectName(filePath: string): string {
   const relativePath = path.relative(process.cwd(), filePath);
   const pathParts = relativePath.split(path.sep);
   
@@ -111,11 +111,24 @@ function extractProjectName(filePath: string): string {
   const patternIndex = pathParts.findIndex(part => monorepoPatterns.includes(part));
   
   if (patternIndex >= 0 && patternIndex + 1 < pathParts.length) {
+    let packageName: string | null = null;
+    let packageNameIndex = -1;
     for (let i = patternIndex + 1; i < pathParts.length; i++) {
-      const part = pathParts[i];
-      if (!buildOutputDirs.includes(part)) {
-        return part;
+      if (!buildOutputDirs.includes(pathParts[i])) {
+        packageName = pathParts[i];
+        packageNameIndex = i;
+        break;
       }
+    }
+
+    if (packageName) {
+      for (let i = pathParts.length - 2; i > packageNameIndex; i--) {
+        const part = pathParts[i];
+        if (!buildOutputDirs.includes(part)) {
+          return `${packageName}/${part}`;
+        }
+      }
+      return packageName;
     }
   }
   
