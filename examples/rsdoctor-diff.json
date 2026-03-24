@@ -1,0 +1,170 @@
+{
+  "assets": {
+    "all": {
+      "total": {
+        "size": {
+          "baseline": 285905,
+          "current": 286116
+        },
+        "count": {
+          "baseline": 8,
+          "current": 8
+        },
+        "percent": 0.07380073800738007,
+        "state": "UP"
+      }
+    },
+    "js": {
+      "total": {
+        "size": {
+          "baseline": 284839,
+          "current": 285050
+        },
+        "count": {
+          "baseline": 5,
+          "current": 5
+        },
+        "percent": 0.07407693468942103,
+        "state": "UP"
+      },
+      "initial": {
+        "size": {
+          "baseline": 284664,
+          "current": 284875
+        },
+        "count": {
+          "baseline": 4,
+          "current": 4
+        },
+        "percent": 0.07412247421521513,
+        "state": "UP"
+      }
+    },
+    "css": {
+      "total": {
+        "size": {
+          "baseline": 430,
+          "current": 430
+        },
+        "count": {
+          "baseline": 1,
+          "current": 1
+        },
+        "percent": 0,
+        "state": "-"
+      },
+      "initial": {
+        "size": {
+          "baseline": 430,
+          "current": 430
+        },
+        "count": {
+          "baseline": 1,
+          "current": 1
+        },
+        "percent": 0,
+        "state": "-"
+      }
+    },
+    "imgs": {
+      "total": {
+        "size": {
+          "baseline": 0,
+          "current": 0
+        },
+        "count": {
+          "baseline": 0,
+          "current": 0
+        },
+        "percent": 0,
+        "state": "-"
+      }
+    },
+    "html": {
+      "total": {
+        "size": {
+          "baseline": 636,
+          "current": 636
+        },
+        "count": {
+          "baseline": 2,
+          "current": 2
+        },
+        "percent": 0,
+        "state": "-"
+      }
+    },
+    "media": {
+      "total": {
+        "size": {
+          "baseline": 0,
+          "current": 0
+        },
+        "count": {
+          "baseline": 0,
+          "current": 0
+        },
+        "percent": 0,
+        "state": "-"
+      }
+    },
+    "fonts": {
+      "total": {
+        "size": {
+          "baseline": 0,
+          "current": 0
+        },
+        "count": {
+          "baseline": 0,
+          "current": 0
+        },
+        "percent": 0,
+        "state": "-"
+      }
+    },
+    "others": {
+      "total": {
+        "size": {
+          "baseline": 0,
+          "current": 0
+        },
+        "count": {
+          "baseline": 0,
+          "current": 0
+        },
+        "percent": 0,
+        "state": "-"
+      }
+    }
+  },
+  "modules": {
+    "added": [],
+    "removed": [],
+    "changed": [
+      {
+        "path": "/Users/congzhe/Documents/2_workspace/rsdoctor/examples/rsbuild-minimal/src/App.tsx",
+        "size": {
+          "baseline": {
+            "sourceSize": 566,
+            "transformedSize": 0,
+            "parsedSize": 873,
+            "gzipSize": 415
+          },
+          "current": {
+            "sourceSize": 558,
+            "transformedSize": 0,
+            "parsedSize": 1078,
+            "gzipSize": 438
+          }
+        },
+        "percent": 23.482245131729666,
+        "state": "UP"
+      }
+    ]
+  },
+  "packages": {
+    "added": [],
+    "removed": [],
+    "changed": []
+  }
+}

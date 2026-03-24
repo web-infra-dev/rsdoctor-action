@@ -70,6 +70,8 @@ jobs:
           pnpm run build
           
       - name: Report Compressed Size
+        env:
+          AI_TOKEN: ${{ vars.AI_TOKEN }}
         uses: ./
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}

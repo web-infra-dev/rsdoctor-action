@@ -20,6 +20,14 @@ inputs:
     required: false
     default: ''
     type: string
+  ai_model:
+    description: 'AI model to use for degradation analysis (e.g. claude-3-5-haiku-latest, gpt-4o-mini, qwen-plus). Provider is auto-detected from the model name prefix.'
+    required: false
+    default: 'qwen3.5-plus'
+  ai_base_url:
+    description: 'Custom base URL for AI API (e.g. https://dashscope.aliyuncs.com/compatible-mode/v1 for Qwen). Defaults to official endpoints.'
+    required: false
+    default: ''
 
 runs:
   using: 'node20'

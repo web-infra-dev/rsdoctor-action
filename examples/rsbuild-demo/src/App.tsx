@@ -12,12 +12,12 @@ const App = () => {
       <p>Start building amazing things with Rsbuild.</p>
       
       <div className="button-container">
-        <button onClick={handleClick} className="primary-button">
+        {/* <button onClick={handleClick} className="primary-button">
           Click Me!
         </button>
         <button onClick={() => console.log('Secondary button')} className="secondary-button">
           Secondary Action
-        </button>
+        </button> */}
       </div>
             
       <div className="button-container">
