@@ -96746,7 +96746,8 @@ var __webpack_exports__ = {};
                     console.log(`⚠️ npx approach also failed: ${npxError}`);
                 }
             }
-            const diffHtmlPath = external_path_default().join(tempOutDir, `rsdoctor-diff-${projectName}.html`);
+            const safeProjectName = projectName.replace(/\//g, '-');
+            const diffHtmlPath = external_path_default().join(tempOutDir, `rsdoctor-diff-${safeProjectName}.html`);
             const defaultDiffPath = external_path_default().join(tempOutDir, 'rsdoctor-diff.html');
             if (external_fs_.existsSync(defaultDiffPath)) try {
                 await external_fs_.promises.rename(defaultDiffPath, diffHtmlPath);

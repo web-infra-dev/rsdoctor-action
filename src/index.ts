@@ -247,7 +247,8 @@ async function processSingleFile(
         }
       }
 
-      const diffHtmlPath = path.join(tempOutDir, `rsdoctor-diff-${projectName}.html`);
+      const safeProjectName = projectName.replace(/\//g, '-');
+      const diffHtmlPath = path.join(tempOutDir, `rsdoctor-diff-${safeProjectName}.html`);
       const defaultDiffPath = path.join(tempOutDir, 'rsdoctor-diff.html');
       if (fs.existsSync(defaultDiffPath)) {
         try {
