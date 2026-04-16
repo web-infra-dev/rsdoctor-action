@@ -96874,59 +96874,6 @@ var __webpack_exports__ = {};
                 const firstReport = projectReports.find((r)=>r.current);
                 if (firstReport?.baselineUsedFallback && firstReport?.baselineLatestCommitHash) commentBody += `> ⚠️ **Note:** The latest commit (\`${firstReport.baselineLatestCommitHash}\`) does not have baseline artifacts. Using commit \`${firstReport.baselineCommitHash}\` for baseline comparison instead. If this seems incorrect, please wait a few minutes and try rerunning the workflow.\n\n`;
                 const reportsWithCurrent = projectReports.filter((r)=>r.current);
-                if (reportsWithCurrent.length > 1) {
-                    let projectsWithChanges = 0;
-                    for (const report of reportsWithCurrent){
-                        if (!report.current) continue;
-                        if (!report.baseline) {
-                            projectsWithChanges++;
-                            continue;
-                        }
-                        const currentSize = report.current.totalSize;
-                        const baselineSize = report.baseline.totalSize;
-                        if (0 === baselineSize || isNaN(baselineSize)) continue;
-                        const diff = currentSize - baselineSize;
-                        if (0 !== diff) projectsWithChanges++;
-                    }
-                    const totalProjects = reportsWithCurrent.length;
-                    const projectWord = 1 === totalProjects ? 'project' : 'projects';
-                    const changeWord = 1 === projectsWithChanges ? 'project' : 'projects';
-                    commentBody += `Found ${totalProjects} ${projectWord} in monorepo, ${projectsWithChanges} ${changeWord} with changes.\n\n`;
-                }
-                if (reportsWithCurrent.length > 0) {
-                    let hasChanges = false;
-                    for (const report of reportsWithCurrent){
-                        if (!report.current) continue;
-                        if (!report.baseline) {
-                            hasChanges = true;
-                            break;
-                        }
-                        const currentSize = report.current.totalSize;
-                        const baselineSize = report.baseline.totalSize;
-                        if (0 === baselineSize || isNaN(baselineSize)) continue;
-                        const diff = currentSize - baselineSize;
-                        if (0 !== diff) {
-                            hasChanges = true;
-                            break;
-                        }
-                    }
-                    const detailsTag = hasChanges ? '<details open>\n' : '<details>\n';
-                    commentBody += `${detailsTag}<summary><b>📊 Quick Summary</b></summary>\n\n`;
-                    commentBody += '| Project | Total Size | Change |\n';
-                    commentBody += '|---------|------------|--------|\n';
-                    for (const report of reportsWithCurrent){
-                        if (!report.current) continue;
-                        const currentSize = report.current.totalSize;
-                        const baselineSize = report.baseline?.totalSize || 0;
-                        const diff = report.baseline ? calculateDiff(currentSize, baselineSize) : {
-                            value: '-',
-                            emoji: ''
-                        };
-                        const sizeStr = formatBytes(currentSize);
-                        commentBody += `| ${report.projectName} | ${sizeStr} | ${diff.emoji} ${diff.value} |\n`;
-                    }
-                    commentBody += '\n</details>\n\n';
-                }
                 const hasSignificantChanges = (report)=>{
                     if (!report.current) return false;
                     if (!report.baseline) return true;
@@ -96936,20 +96883,42 @@ var __webpack_exports__ = {};
                     const diff = currentSize - baselineSize;
                     return 0 !== diff;
                 };
-                const reportsWithChanges = projectReports.filter((report)=>{
-                    if (!report.current) return false;
-                    return hasSignificantChanges(report);
-                });
-                if (reportsWithChanges.length > 0) {
-                    commentBody += '<details>\n<summary><b>📋 Detailed Reports</b> (Click to expand)</summary>\n\n';
-                    for (const report of reportsWithChanges){
-                        commentBody += generateProjectMarkdown(report.projectName, report.filePath, report.current, report.baseline || void 0, report.baselineCommitHash, report.baselinePRs);
-                        if (report.diffHtmlArtifactId) {
-                            const artifactDownloadLink = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}/artifacts/${report.diffHtmlArtifactId}`;
-                            commentBody += `\n📦 **Download Diff Report**: [${report.projectName} Bundle Diff](${artifactDownloadLink})\n\n`;
-                        }
+                if (1 === reportsWithCurrent.length) {
+                    const report = reportsWithCurrent[0];
+                    commentBody += generateProjectMarkdown(report.projectName, report.filePath, report.current, report.baseline || void 0, report.baselineCommitHash, report.baselinePRs);
+                    if (report.diffHtmlArtifactId) {
+                        const artifactDownloadLink = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}/artifacts/${report.diffHtmlArtifactId}`;
+                        commentBody += `\n📦 **Download Diff Report**: [${report.projectName} Bundle Diff](${artifactDownloadLink})\n\n`;
                     }
-                    if (reportsWithChanges.length > 1) commentBody += '</details>\n\n';
+                } else {
+                    const reportsWithChanges = reportsWithCurrent.filter(hasSignificantChanges);
+                    let projectsWithChanges = reportsWithChanges.length;
+                    commentBody += `Found ${reportsWithCurrent.length} projects in monorepo, ${projectsWithChanges} ${1 === projectsWithChanges ? 'project' : 'projects'} with changes.\n\n`;
+                    const detailsTag = reportsWithChanges.length > 0 ? '<details open>\n' : '<details>\n';
+                    commentBody += `${detailsTag}<summary><b>📊 Quick Summary</b></summary>\n\n`;
+                    commentBody += '| Project | Total Size | Change |\n';
+                    commentBody += '|---------|------------|--------|\n';
+                    for (const report of reportsWithCurrent){
+                        const currentSize = report.current.totalSize;
+                        const baselineSize = report.baseline?.totalSize || 0;
+                        const diff = report.baseline ? calculateDiff(currentSize, baselineSize) : {
+                            value: '-',
+                            emoji: ''
+                        };
+                        commentBody += `| ${report.projectName} | ${formatBytes(currentSize)} | ${diff.emoji} ${diff.value} |\n`;
+                    }
+                    commentBody += '\n</details>\n\n';
+                    if (reportsWithChanges.length > 0) {
+                        commentBody += '<details>\n<summary><b>📋 Detailed Reports</b> (Click to expand)</summary>\n\n';
+                        for (const report of reportsWithChanges){
+                            commentBody += generateProjectMarkdown(report.projectName, report.filePath, report.current, report.baseline || void 0, report.baselineCommitHash, report.baselinePRs);
+                            if (report.diffHtmlArtifactId) {
+                                const artifactDownloadLink = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}/artifacts/${report.diffHtmlArtifactId}`;
+                                commentBody += `\n📦 **Download Diff Report**: [${report.projectName} Bundle Diff](${artifactDownloadLink})\n\n`;
+                            }
+                        }
+                        commentBody += '</details>\n\n';
+                    }
                 }
                 commentBody += '*Generated by [Rsdoctor GitHub Action](https://rsdoctor.rs/guide/start/action)*';
                 try {

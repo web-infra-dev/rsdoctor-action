@@ -458,72 +458,7 @@ async function processSingleFile(
         commentBody += `> ⚠️ **Note:** The latest commit (\`${firstReport.baselineLatestCommitHash}\`) does not have baseline artifacts. Using commit \`${firstReport.baselineCommitHash}\` for baseline comparison instead. If this seems incorrect, please wait a few minutes and try rerunning the workflow.\n\n`;
       }
       
-      // Generate summary (always visible)
       const reportsWithCurrent = projectReports.filter(r => r.current);
-      if (reportsWithCurrent.length > 1) {
-        // Count projects with changes
-        let projectsWithChanges = 0;
-        for (const report of reportsWithCurrent) {
-          if (!report.current) continue;
-          if (!report.baseline) {
-            projectsWithChanges++;
-            continue;
-          }
-          const currentSize = report.current.totalSize;
-          const baselineSize = report.baseline.totalSize;
-          if (baselineSize === 0 || isNaN(baselineSize)) continue;
-          const diff = currentSize - baselineSize;
-          if (diff !== 0) {
-            projectsWithChanges++;
-          }
-        }
-        
-        const totalProjects = reportsWithCurrent.length;
-        const projectWord = totalProjects === 1 ? 'project' : 'projects';
-        const changeWord = projectsWithChanges === 1 ? 'project' : 'projects';
-        commentBody += `Found ${totalProjects} ${projectWord} in monorepo, ${projectsWithChanges} ${changeWord} with changes.\n\n`;
-      }
-      
-      // Generate summary table for quick overview
-      if (reportsWithCurrent.length > 0) {
-        // Check if any project has changes (any non-zero change)
-        let hasChanges = false;
-        for (const report of reportsWithCurrent) {
-          if (!report.current) continue;
-          if (!report.baseline) {
-            hasChanges = true; // No baseline means we can't compare, show it
-            break;
-          }
-          const currentSize = report.current.totalSize;
-          const baselineSize = report.baseline.totalSize;
-          if (baselineSize === 0 || isNaN(baselineSize)) continue;
-          const diff = currentSize - baselineSize;
-          // Show if there's any non-zero change
-          if (diff !== 0) {
-            hasChanges = true;
-            break;
-          }
-        }
-        
-        // Use 'open' attribute if there are changes, otherwise keep it collapsed
-        const detailsTag = hasChanges ? '<details open>\n' : '<details>\n';
-        commentBody += `${detailsTag}<summary><b>📊 Quick Summary</b></summary>\n\n`;
-        commentBody += '| Project | Total Size | Change |\n';
-        commentBody += '|---------|------------|--------|\n';
-        
-        for (const report of reportsWithCurrent) {
-          if (!report.current) continue;
-          const currentSize = report.current.totalSize;
-          const baselineSize = report.baseline?.totalSize || 0;
-          const diff = report.baseline ? calculateDiff(currentSize, baselineSize) : { value: '-', emoji: '' };
-          const sizeStr = formatBytes(currentSize);
-          commentBody += `| ${report.projectName} | ${sizeStr} | ${diff.emoji} ${diff.value} |\n`;
-        }
-        
-        commentBody += '\n</details>\n\n';
-      }
-      
-      // Helper function to check if a report has significant changes
 
       const hasSignificantChanges = (report: ProjectReport): boolean => {
         if (!report.current) return false;
@@ -535,33 +470,47 @@ async function processSingleFile(
         // Show detailed report if there's any change (not zero)
         return diff !== 0;
       };
-      
-      // Filter reports with changes
-      const reportsWithChanges = projectReports.filter(report => {
-        if (!report.current) return false;
-        return hasSignificantChanges(report);
-      });
-      
-      // Generate detailed reports only for projects with changes
-      if (reportsWithChanges.length > 0) {
-        // Only add collapse wrapper if there are multiple reports with changes
-          commentBody += '<details>\n<summary><b>📋 Detailed Reports</b> (Click to expand)</summary>\n\n';
-        
-        for (const report of reportsWithChanges) {
-          commentBody += generateProjectMarkdown(report.projectName, report.filePath, report.current!, report.baseline || undefined, report.baselineCommitHash, report.baselinePRs);
-          
-          // Add diff HTML link if available
-          if (report.diffHtmlArtifactId) {
-            const artifactDownloadLink = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}/artifacts/${report.diffHtmlArtifactId}`;
-            commentBody += `\n📦 **Download Diff Report**: [${report.projectName} Bundle Diff](${artifactDownloadLink})\n\n`;
-          }
+
+      if (reportsWithCurrent.length === 1) {
+        // Single project: always render inline regardless of changes
+        const report = reportsWithCurrent[0];
+        commentBody += generateProjectMarkdown(report.projectName, report.filePath, report.current!, report.baseline || undefined, report.baselineCommitHash, report.baselinePRs);
+        if (report.diffHtmlArtifactId) {
+          const artifactDownloadLink = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}/artifacts/${report.diffHtmlArtifactId}`;
+          commentBody += `\n📦 **Download Diff Report**: [${report.projectName} Bundle Diff](${artifactDownloadLink})\n\n`;
         }
-        
-        if (reportsWithChanges.length > 1) {
+      } else {
+        // Multiple projects: quick summary + collapsible details for changed projects only
+        const reportsWithChanges = reportsWithCurrent.filter(hasSignificantChanges);
+
+        let projectsWithChanges = reportsWithChanges.length;
+        commentBody += `Found ${reportsWithCurrent.length} projects in monorepo, ${projectsWithChanges} ${projectsWithChanges === 1 ? 'project' : 'projects'} with changes.\n\n`;
+
+        const detailsTag = reportsWithChanges.length > 0 ? '<details open>\n' : '<details>\n';
+        commentBody += `${detailsTag}<summary><b>📊 Quick Summary</b></summary>\n\n`;
+        commentBody += '| Project | Total Size | Change |\n';
+        commentBody += '|---------|------------|--------|\n';
+        for (const report of reportsWithCurrent) {
+          const currentSize = report.current!.totalSize;
+          const baselineSize = report.baseline?.totalSize || 0;
+          const diff = report.baseline ? calculateDiff(currentSize, baselineSize) : { value: '-', emoji: '' };
+          commentBody += `| ${report.projectName} | ${formatBytes(currentSize)} | ${diff.emoji} ${diff.value} |\n`;
+        }
+        commentBody += '\n</details>\n\n';
+
+        if (reportsWithChanges.length > 0) {
+          commentBody += '<details>\n<summary><b>📋 Detailed Reports</b> (Click to expand)</summary>\n\n';
+          for (const report of reportsWithChanges) {
+            commentBody += generateProjectMarkdown(report.projectName, report.filePath, report.current!, report.baseline || undefined, report.baselineCommitHash, report.baselinePRs);
+            if (report.diffHtmlArtifactId) {
+              const artifactDownloadLink = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}/artifacts/${report.diffHtmlArtifactId}`;
+              commentBody += `\n📦 **Download Diff Report**: [${report.projectName} Bundle Diff](${artifactDownloadLink})\n\n`;
+            }
+          }
           commentBody += '</details>\n\n';
         }
       }
-      
+
       commentBody += '*Generated by [Rsdoctor GitHub Action](https://rsdoctor.rs/guide/start/action)*';
       
       try {
