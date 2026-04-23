@@ -71,6 +71,8 @@ jobs:
           
       - name: Report Compressed Size
         uses: ./
+        env:
+          AI_TOKEN: ${{ secrets.AI_TOKEN }}
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           file_path: 'examples/**/*/.rsdoctor/rsdoctor-data.json'
