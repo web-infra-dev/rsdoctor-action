@@ -34,7 +34,7 @@ Overall severity: **Low / Medium / High**
 3. If total bundle size *decreased*, highlight the wins instead.
 
 ## Constraints
-- Be concise — aim for <400 words.
+- Be concise — aim for <300 words.
 - Use exact numbers from the data; do not fabricate figures.
 - If the diff data is empty or shows no meaningful change, state that clearly and skip the table.
 
