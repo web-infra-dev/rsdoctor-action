@@ -25,6 +25,18 @@ describe('Report Module', () => {
       const result = parseRsdoctorData('non-existent.json');
       expect(result).toBeNull();
     });
+
+    describe('should exclude source maps and license files from size calculations', () => {
+      it('should exclude .js.map, .css.map and .LICENSE.txt assets (fixture has 5, 3 should be excluded)', () => {
+        const result = parseRsdoctorData(mockRsdoctorDataPath);
+        expect(result?.assets).toHaveLength(2);
+      });
+
+      it('should not include source map or license file sizes in otherSize', () => {
+        const result = parseRsdoctorData(mockRsdoctorDataPath);
+        expect(result?.otherSize).toBe(0);
+      });
+    });
   });
 
   describe('generateProjectMarkdown', () => {

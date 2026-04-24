@@ -13,6 +13,24 @@
           "path": "dist/static/css/index.css",
           "size": 10485760,
           "chunks": ["index"]
+        },
+        {
+          "id": 3,
+          "path": "dist/static/js/index.js.map",
+          "size": 104857600,
+          "chunks": ["index"]
+        },
+        {
+          "id": 4,
+          "path": "dist/static/css/index.css.map",
+          "size": 5242880,
+          "chunks": ["index"]
+        },
+        {
+          "id": 5,
+          "path": "dist/static/js/vendor.LICENSE.txt",
+          "size": 10240,
+          "chunks": ["index"]
         }
       ],
       "chunks": [

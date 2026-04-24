@@ -96754,12 +96754,19 @@ var __webpack_exports__ = {};
             }
             const data = JSON.parse(external_fs_.readFileSync(filePath, 'utf8'));
             const { assets, chunks } = data.data.chunkGraph;
+            const excludedExtensions = [
+                '.js.map',
+                '.css.map',
+                '.ts.map',
+                '.LICENSE.txt'
+            ];
             let totalSize = 0;
             let jsSize = 0;
             let cssSize = 0;
             let htmlSize = 0;
             let otherSize = 0;
-            const assetAnalysis = assets.map((asset)=>{
+            const assetAnalysis = assets.reduce((acc, asset)=>{
+                if (excludedExtensions.some((ext)=>asset.path.endsWith(ext))) return acc;
                 totalSize += asset.size;
                 let type = 'other';
                 if (asset.path.endsWith('.js')) {
@@ -96772,12 +96779,13 @@ var __webpack_exports__ = {};
                     type = 'html';
                     htmlSize += asset.size;
                 } else otherSize += asset.size;
-                return {
+                acc.push({
                     path: asset.path,
                     size: asset.size,
                     type
-                };
-            });
+                });
+                return acc;
+            }, []);
             const chunkAnalysis = chunks.map((chunk)=>({
                     name: chunk.name,
                     size: chunk.size,

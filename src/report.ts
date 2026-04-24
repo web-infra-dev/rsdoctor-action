@@ -96,16 +96,19 @@ export function parseRsdoctorData(filePath: string): BundleAnalysis | null {
     
     const data: RsdoctorData = JSON.parse(fs.readFileSync(filePath, 'utf8'));
     const { assets, chunks } = data.data.chunkGraph;
-    
+    const excludedExtensions = ['.js.map', '.css.map', '.ts.map', '.LICENSE.txt'];
+
     let totalSize = 0;
     let jsSize = 0;
     let cssSize = 0;
     let htmlSize = 0;
     let otherSize = 0;
-    
-    const assetAnalysis = assets.map(asset => {
+
+    const assetAnalysis = assets.reduce((acc: Array<{ path: string; size: number; type: 'js' | 'css' | 'html' | 'other' }>, asset) => {
+      if (excludedExtensions.some(ext => asset.path.endsWith(ext))) return acc;
+
       totalSize += asset.size;
-      
+
       let type: 'js' | 'css' | 'html' | 'other' = 'other';
       if (asset.path.endsWith('.js')) {
         type = 'js';
@@ -119,13 +122,10 @@ export function parseRsdoctorData(filePath: string): BundleAnalysis | null {
       } else {
         otherSize += asset.size;
       }
-      
-      return {
-        path: asset.path,
-        size: asset.size,
-        type
-      };
-    });
+
+      acc.push({ path: asset.path, size: asset.size, type });
+      return acc;
+    }, []);
     
     const chunkAnalysis = chunks.map(chunk => ({
       name: chunk.name,
