@@ -6,6 +6,8 @@
   "scripts": {
     "build": "rslib build",
     "diff": "npx rsdoctor bundle-diff --html --baseline=examples/rsbuild-demo/dist/.rsdoctor/rsdoctor-data.json --current=examples/rsbuild-demo/dist/.rsdoctor/rsdoctor-data.json",
+    "lint": "rslint",
+    "lint:fix": "rslint --fix",
     "test": "rstest",
     "test:watch": "rstest --watch",
     "test:coverage": "rstest --coverage",
@@ -48,6 +50,7 @@
     "@rsdoctor/cli": "1.5.8",
     "@rsdoctor/client": "1.5.8",
     "@rslib/core": "^0.16.0",
+    "@rslint/core": "^0.5.1",
     "@rstest/core": "^0.5.4",
     "@types/node": "^24.5.2",
     "@types/node-fetch": "^2.6.11",
