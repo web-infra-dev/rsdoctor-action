@@ -96153,9 +96153,13 @@ var __webpack_exports__ = {};
     var external_fs_ = __webpack_require__("fs");
     var external_child_process_ = __webpack_require__("child_process");
     var external_crypto_ = __webpack_require__("crypto");
+    const ARTIFACT_NAME_PREFIX = 'rsdoctor';
     function hashPath(pathParts, fileNameWithoutExt) {
         const pathString = `${pathParts.join('-')}-${fileNameWithoutExt}`;
         return (0, external_crypto_.createHash)('sha256').update(pathString).digest('hex').substring(0, 8);
+    }
+    function createArtifactName(pathHash, commitHash) {
+        return `${ARTIFACT_NAME_PREFIX}-${pathHash}-${commitHash}`;
     }
     async function uploadArtifact(filePath, commitHash) {
         const artifactClient = new lib_artifact.DefaultArtifactClient();
@@ -96169,7 +96173,7 @@ var __webpack_exports__ = {};
         const pathParts = relativePath.split(external_path_default().sep);
         const fileNameWithoutExt = external_path_default().parse(fileName).name;
         const pathHash = hashPath(pathParts, fileNameWithoutExt);
-        const artifactName = `${pathHash}-${hash}`;
+        const artifactName = createArtifactName(pathHash, hash);
         console.log(`Uploading artifact: ${artifactName}`);
         console.log(`From file: ${targetFilePath}`);
         const uploadResponse = await artifactClient.uploadArtifact(artifactName, [
@@ -96637,8 +96641,11 @@ var __webpack_exports__ = {};
         const fileNameWithoutExt = external_path_default().parse(fileName).name;
         const fileExt = external_path_default().parse(fileName).ext;
         const pathHash = hashPath(pathParts, fileNameWithoutExt);
-        const expectedArtifactName = `${pathHash}-${commitHash}`;
-        const legacyArtifactName = `${pathHash}-${commitHash}${fileExt}`;
+        const expectedArtifactName = createArtifactName(pathHash, commitHash);
+        const legacyArtifactNames = [
+            `${pathHash}-${commitHash}`,
+            `${pathHash}-${commitHash}${fileExt}`
+        ];
         console.log(`📋 Searching for artifact with path hash and commit hash: ${expectedArtifactName}`);
         console.log(`   Path hash: ${pathHash}`);
         console.log(`   File path: ${relativePath}`);
@@ -96653,7 +96660,7 @@ var __webpack_exports__ = {};
                 console.log(`   Status: ${workflowRun.status}, Conclusion: ${workflowRun.conclusion}`);
                 try {
                     const runArtifacts = await githubService.listArtifactsForWorkflowRun(workflowRun.id);
-                    const foundArtifact = runArtifacts.artifacts?.find((a)=>a.name === expectedArtifactName || a.name === legacyArtifactName);
+                    const foundArtifact = runArtifacts.artifacts?.find((a)=>a.name === expectedArtifactName || legacyArtifactNames.includes(a.name));
                     if (foundArtifact) {
                         artifact = foundArtifact;
                         artifacts = runArtifacts;
@@ -96679,7 +96686,7 @@ var __webpack_exports__ = {};
         }
         if (!artifact) {
             artifacts = await githubService.listArtifacts();
-            artifact = artifacts.artifacts.find((a)=>a.name === expectedArtifactName || a.name === legacyArtifactName);
+            artifact = artifacts.artifacts.find((a)=>a.name === expectedArtifactName || legacyArtifactNames.includes(a.name));
         }
         if (!artifact) {
             console.log(`❌ No artifact found matching: ${expectedArtifactName}`);
