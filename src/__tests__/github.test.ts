@@ -30,12 +30,12 @@ describe('GitHub Service', () => {
 
   describe('getTargetBranchLatestCommit', () => {
     it('should get commit from GitHub API', async () => {
-      const mockCommitSha = 'abcdef1234';
+      const mockCommitSha = 'abcdef1234abcdef1234abcdef1234abcdef1234';
       nock('https://api.github.com')
         .get('/repos/web-infra-dev/rsdoctor-action/branches/main')
         .reply(200, {
           commit: {
-            sha: mockCommitSha + '0123456789',
+            sha: mockCommitSha,
           },
         });
 
@@ -47,11 +47,19 @@ describe('GitHub Service', () => {
           workflow_runs: [],
         });
 
+      // Mock branch-filtered fallback workflow runs check (no artifacts found)
+      nock('https://api.github.com')
+        .get('/repos/web-infra-dev/rsdoctor-action/actions/runs')
+        .query({ branch: 'main', status: 'completed', per_page: 100 })
+        .reply(200, {
+          workflow_runs: [],
+        });
+
       // Mock get parent commit (no parent, reached beginning)
       nock('https://api.github.com')
         .get(`/repos/web-infra-dev/rsdoctor-action/commits/${mockCommitSha}`)
         .reply(200, {
-          sha: mockCommitSha + '0123456789',
+          sha: mockCommitSha,
           parents: [],
         });
 
@@ -63,13 +71,13 @@ describe('GitHub Service', () => {
     });
 
     it('should return object with fallback info when latest commit has no artifacts', async () => {
-      const mockCommitSha = 'abcdef1234';
-      const mockParentSha = 'parent1234';
+      const mockCommitSha = 'abcdef1234abcdef1234abcdef1234abcdef1234';
+      const mockParentSha = '1234567890abcdef1234567890abcdef12345678';
       nock('https://api.github.com')
         .get('/repos/web-infra-dev/rsdoctor-action/branches/main')
         .reply(200, {
           commit: {
-            sha: mockCommitSha + '0123456789',
+            sha: mockCommitSha,
           },
         });
 
@@ -81,13 +89,21 @@ describe('GitHub Service', () => {
           workflow_runs: [],
         });
 
+      // Mock branch-filtered fallback workflow runs check for latest commit (no artifacts)
+      nock('https://api.github.com')
+        .get('/repos/web-infra-dev/rsdoctor-action/actions/runs')
+        .query({ branch: 'main', status: 'completed', per_page: 100 })
+        .reply(200, {
+          workflow_runs: [],
+        });
+
       // Mock get parent commit
       nock('https://api.github.com')
         .get(`/repos/web-infra-dev/rsdoctor-action/commits/${mockCommitSha}`)
         .reply(200, {
-          sha: mockCommitSha + '0123456789',
+          sha: mockCommitSha,
           parents: [
-            { sha: mockParentSha + '0123456789' },
+            { sha: mockParentSha },
           ],
         });
 
@@ -123,6 +139,72 @@ describe('GitHub Service', () => {
       expect(result.usedFallbackCommit).toBe(true);
       expect(result.latestCommitHash).toBe(mockCommitSha);
     });
+
+    it('should use the full SHA when querying workflow runs for baseline artifacts', async () => {
+      const mockCommitSha = 'fedcba9876fedcba9876fedcba9876fedcba9876';
+      nock('https://api.github.com')
+        .get('/repos/web-infra-dev/rsdoctor-action/branches/main')
+        .reply(200, {
+          commit: {
+            sha: mockCommitSha,
+          },
+        });
+
+      nock('https://api.github.com')
+        .get('/repos/web-infra-dev/rsdoctor-action/actions/runs')
+        .query({ head_sha: mockCommitSha, status: 'completed', per_page: 30 })
+        .reply(200, {
+          workflow_runs: [
+            {
+              id: 456,
+              name: 'CI',
+              status: 'completed',
+              conclusion: 'success',
+            },
+          ],
+        });
+
+      nock('https://api.github.com')
+        .get('/repos/web-infra-dev/rsdoctor-action/actions/runs/456/artifacts')
+        .reply(200, {
+          artifacts: [
+            { id: 1, name: 'rsdoctor-artifact' },
+          ],
+        });
+
+      const result = await githubService.getTargetBranchLatestCommit();
+      expect(result.commitHash).toBe(mockCommitSha);
+      expect(result.usedFallbackCommit).toBe(false);
+    });
+  });
+
+  describe('findAllWorkflowRunsByCommit', () => {
+    it('should filter fallback workflow run lookup by branch', async () => {
+      const fullSha = 'abcdef1234abcdef1234abcdef1234abcdef1234';
+
+      nock('https://api.github.com')
+        .get('/repos/web-infra-dev/rsdoctor-action/actions/runs')
+        .query({ head_sha: fullSha, status: 'completed', per_page: 30 })
+        .reply(200, {
+          workflow_runs: [],
+        });
+
+      nock('https://api.github.com')
+        .get('/repos/web-infra-dev/rsdoctor-action/actions/runs')
+        .query({ branch: 'main', status: 'completed', per_page: 100 })
+        .reply(200, {
+          workflow_runs: [
+            {
+              id: 789,
+              head_sha: fullSha,
+              conclusion: 'success',
+            },
+          ],
+        });
+
+      const runs = await githubService.findAllWorkflowRunsByCommit(fullSha, 'completed', 'main');
+      expect(runs).toHaveLength(1);
+      expect(runs[0].id).toBe(789);
+    });
   });
 });
-
