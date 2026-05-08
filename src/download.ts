@@ -2,7 +2,7 @@ import path from 'path';
 import * as fs from 'fs';
 import { GitHubService } from './github';
 import * as yauzl from 'yauzl';
-import { hashPath } from './upload';
+import { createArtifactName, hashPath } from './upload';
 
 export async function downloadArtifact(artifactId: number, fileName: string) {
   console.log(`📥 Downloading artifact ID: ${artifactId}`);
@@ -106,9 +106,12 @@ export async function downloadArtifactByCommitHash(
   const fileNameWithoutExt = path.parse(fileName).name;
   const fileExt = path.parse(fileName).ext;
   const pathHash = hashPath(pathParts, fileNameWithoutExt);
-  // New format (no extension); legacy format includes the file extension
-  const expectedArtifactName = `${pathHash}-${commitHash}`;
-  const legacyArtifactName = `${pathHash}-${commitHash}${fileExt}`;
+  const expectedArtifactName = createArtifactName(pathHash, commitHash);
+  // Legacy formats were used before artifact names were prefixed for cleanup.
+  const legacyArtifactNames = [
+    `${pathHash}-${commitHash}`,
+    `${pathHash}-${commitHash}${fileExt}`,
+  ];
 
   console.log(`📋 Searching for artifact with path hash and commit hash: ${expectedArtifactName}`);
   console.log(`   Path hash: ${pathHash}`);
@@ -131,7 +134,9 @@ export async function downloadArtifactByCommitHash(
       
       try {
         const runArtifacts = await githubService.listArtifactsForWorkflowRun(workflowRun.id);
-        const foundArtifact = runArtifacts.artifacts?.find((a: any) => a.name === expectedArtifactName || a.name === legacyArtifactName);
+        const foundArtifact = runArtifacts.artifacts?.find(
+          (a: any) => a.name === expectedArtifactName || legacyArtifactNames.includes(a.name),
+        );
         
         if (foundArtifact) {
           artifact = foundArtifact;
@@ -160,7 +165,9 @@ export async function downloadArtifactByCommitHash(
   // Fallback: if not found in any workflow run, search all repository artifacts
   if (!artifact) {
     artifacts = await githubService.listArtifacts();
-    artifact = artifacts.artifacts.find((a: any) => a.name === expectedArtifactName || a.name === legacyArtifactName);
+    artifact = artifacts.artifacts.find(
+      (a: any) => a.name === expectedArtifactName || legacyArtifactNames.includes(a.name),
+    );
   }
   
   if (!artifact) {

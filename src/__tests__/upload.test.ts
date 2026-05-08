@@ -49,8 +49,13 @@ describe('Upload Module', () => {
       .toThrow('Target file not found');
   });
 
-  it('should generate correct artifact name', async () => {
+  it('should prefix artifact name with rsdoctor for easier cleanup', async () => {
     const result = await uploadArtifact(mockFilePath, mockCommitHash);
+    const relativePath = path.relative(process.cwd(), mockFilePath);
+    const pathParts = relativePath.split(path.sep);
+    const pathHash = hashPath(pathParts, 'rsdoctor-data');
+
+    expect(console.log).toHaveBeenCalledWith(`Uploading artifact: rsdoctor-${pathHash}-${mockCommitHash}`);
     expect(result).toBeDefined();
     expect(result.id).toBe(1);
   });
@@ -89,4 +94,3 @@ describe('Upload Module', () => {
     });
   });
 });
-

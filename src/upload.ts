@@ -4,9 +4,15 @@ import * as fs from 'fs';
 import { execSync } from 'child_process';
 import { createHash } from 'crypto';
 
+export const ARTIFACT_NAME_PREFIX = 'rsdoctor';
+
 export function hashPath(pathParts: string[], fileNameWithoutExt: string): string {
   const pathString = `${pathParts.join('-')}-${fileNameWithoutExt}`;
   return createHash('sha256').update(pathString).digest('hex').substring(0, 8);
+}
+
+export function createArtifactName(pathHash: string, commitHash: string): string {
+  return `${ARTIFACT_NAME_PREFIX}-${pathHash}-${commitHash}`;
 }
 
 export async function uploadArtifact(filePath: string, commitHash?: string) {
@@ -26,7 +32,7 @@ export async function uploadArtifact(filePath: string, commitHash?: string) {
   const fileNameWithoutExt = path.parse(fileName).name;
 
   const pathHash = hashPath(pathParts, fileNameWithoutExt);
-  const artifactName = `${pathHash}-${hash}`;
+  const artifactName = createArtifactName(pathHash, hash);
   
   console.log(`Uploading artifact: ${artifactName}`);
   console.log(`From file: ${targetFilePath}`);
