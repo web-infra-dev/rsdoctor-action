@@ -96719,6 +96719,7 @@ var __webpack_exports__ = {};
             throw downloadError;
         }
     }
+    var external_zlib_ = __webpack_require__("zlib");
     function toGitHubRedirectUrl(url) {
         if (!url) return url;
         if (url.startsWith('https://redirect.github.com/')) return url;
@@ -96744,6 +96745,52 @@ var __webpack_exports__ = {};
         const i = Math.floor(Math.log(absBytes) / Math.log(k));
         const value1 = (absBytes / Math.pow(k, i)).toFixed(1);
         return `${isNegative ? '-' : ''}${value1} ${sizes[i]}`;
+    }
+    function formatOptionalBytes(bytes) {
+        return 'number' != typeof bytes || isNaN(bytes) ? '-' : formatBytes(bytes);
+    }
+    function calculateOptionalDiff(current, baseline) {
+        if ('number' != typeof current || 'number' != typeof baseline) return '-';
+        return calculateDiff(current, baseline).value;
+    }
+    function resolveAssetPath(assetPath, dataFilePath) {
+        const relativeDataPath = external_path_.relative(process.cwd(), dataFilePath);
+        const isDownloadedArtifact = 'temp-artifact' === relativeDataPath.split(external_path_.sep)[0];
+        const candidates = [
+            external_path_.isAbsolute(assetPath) && !isDownloadedArtifact ? assetPath : null,
+            isDownloadedArtifact ? null : external_path_.resolve(process.cwd(), assetPath),
+            external_path_.resolve(external_path_.dirname(dataFilePath), assetPath),
+            external_path_.resolve(external_path_.dirname(dataFilePath), '..', assetPath)
+        ].filter(Boolean);
+        return candidates.find((candidate)=>external_fs_.existsSync(candidate)) || null;
+    }
+    function getAssetGzipSize(asset, dataFilePath) {
+        if ('number' == typeof asset.gzipSize && !isNaN(asset.gzipSize)) return asset.gzipSize;
+        const assetPath = resolveAssetPath(asset.path, dataFilePath);
+        if (!assetPath) return;
+        return (0, external_zlib_.gzipSync)(external_fs_.readFileSync(assetPath)).length;
+    }
+    function enrichRsdoctorDataWithGzip(filePath) {
+        try {
+            if (!external_fs_.existsSync(filePath)) return false;
+            const data = JSON.parse(external_fs_.readFileSync(filePath, 'utf8'));
+            const assets = data.data?.chunkGraph?.assets;
+            if (!Array.isArray(assets)) return false;
+            let updated = false;
+            for (const asset of assets){
+                if ('number' == typeof asset.gzipSize && !isNaN(asset.gzipSize)) continue;
+                const gzipSize = getAssetGzipSize(asset, filePath);
+                if ('number' == typeof gzipSize) {
+                    asset.gzipSize = gzipSize;
+                    updated = true;
+                }
+            }
+            if (updated) external_fs_.writeFileSync(filePath, `${JSON.stringify(data, null, 2)}\n`);
+            return updated;
+        } catch (error) {
+            console.warn(`Failed to enrich rsdoctor data with gzip sizes from ${filePath}:`, error);
+            return false;
+        }
     }
     function parseRsdoctorData(filePath) {
         try {
@@ -96772,23 +96819,41 @@ var __webpack_exports__ = {};
             let cssSize = 0;
             let htmlSize = 0;
             let otherSize = 0;
+            let totalGzipSize = 0;
+            let jsGzipSize = 0;
+            let cssGzipSize = 0;
+            let htmlGzipSize = 0;
+            let otherGzipSize = 0;
+            let hasGzipSize = false;
             const assetAnalysis = assets.reduce((acc, asset)=>{
                 if (excludedExtensions.some((ext)=>asset.path.endsWith(ext))) return acc;
                 totalSize += asset.size;
+                const gzipSize = getAssetGzipSize(asset, filePath);
+                if ('number' == typeof gzipSize) {
+                    totalGzipSize += gzipSize;
+                    hasGzipSize = true;
+                }
                 let type = 'other';
                 if (asset.path.endsWith('.js')) {
                     type = 'js';
                     jsSize += asset.size;
+                    if ('number' == typeof gzipSize) jsGzipSize += gzipSize;
                 } else if (asset.path.endsWith('.css')) {
                     type = 'css';
                     cssSize += asset.size;
+                    if ('number' == typeof gzipSize) cssGzipSize += gzipSize;
                 } else if (asset.path.endsWith('.html')) {
                     type = 'html';
                     htmlSize += asset.size;
-                } else otherSize += asset.size;
+                    if ('number' == typeof gzipSize) htmlGzipSize += gzipSize;
+                } else {
+                    otherSize += asset.size;
+                    if ('number' == typeof gzipSize) otherGzipSize += gzipSize;
+                }
                 acc.push({
                     path: asset.path,
                     size: asset.size,
+                    gzipSize,
                     type
                 });
                 return acc;
@@ -96804,6 +96869,11 @@ var __webpack_exports__ = {};
                 cssSize,
                 htmlSize,
                 otherSize,
+                totalGzipSize: hasGzipSize ? totalGzipSize : void 0,
+                jsGzipSize: hasGzipSize ? jsGzipSize : void 0,
+                cssGzipSize: hasGzipSize ? cssGzipSize : void 0,
+                htmlGzipSize: hasGzipSize ? htmlGzipSize : void 0,
+                otherGzipSize: hasGzipSize ? otherGzipSize : void 0,
                 assets: assetAnalysis,
                 chunks: chunkAnalysis
             };
@@ -96820,6 +96890,7 @@ var __webpack_exports__ = {};
             }
             const data = JSON.parse(external_fs_.readFileSync(filePath, 'utf8'));
             if (!data.totalSize && data.files) data.totalSize = data.files.reduce((sum, file)=>sum + (file.size || 0), 0);
+            if (!data.totalGzipSize && data.files?.some((file)=>'number' == typeof file.gzipSize)) data.totalGzipSize = data.files.reduce((sum, file)=>sum + (file.gzipSize || 0), 0);
             return data;
         } catch (error) {
             console.error(`Failed to load size data from ${filePath}:`, error);
@@ -96875,6 +96946,7 @@ var __webpack_exports__ = {};
         markdown += '| Metric | Current | Baseline | Change |\n';
         markdown += '|--------|---------|----------|--------|\n';
         markdown += `| 📊 Total Size | ${formatBytes(current.totalSize)} | ${baseline ? formatBytes(baseline.totalSize) : '-'} | ${baseline ? calculateDiff(current.totalSize, baseline.totalSize).value : '-'} |\n`;
+        markdown += `| 🗜️ Gzip Size | ${formatOptionalBytes(current.totalGzipSize)} | ${baseline ? formatOptionalBytes(baseline.totalGzipSize) : '-'} | ${baseline ? calculateOptionalDiff(current.totalGzipSize, baseline.totalGzipSize) : '-'} |\n`;
         markdown += `| 📄 JavaScript | ${formatBytes(current.jsSize)} | ${baseline ? formatBytes(baseline.jsSize) : '-'} | ${baseline ? calculateDiff(current.jsSize, baseline.jsSize).value : '-'} |\n`;
         markdown += `| 🎨 CSS | ${formatBytes(current.cssSize)} | ${baseline ? formatBytes(baseline.cssSize) : '-'} | ${baseline ? calculateDiff(current.cssSize, baseline.cssSize).value : '-'} |\n`;
         markdown += `| 🌐 HTML | ${formatBytes(current.htmlSize)} | ${baseline ? formatBytes(baseline.htmlSize) : '-'} | ${baseline ? calculateDiff(current.htmlSize, baseline.htmlSize).value : '-'} |\n`;
@@ -96929,6 +97001,24 @@ var __webpack_exports__ = {};
                 },
                 {
                     data: baseline ? calculateDiff(current.totalSize, baseline.totalSize).value : '0',
+                    header: false
+                }
+            ],
+            [
+                {
+                    data: '🗜️ Gzip Size',
+                    header: false
+                },
+                {
+                    data: formatOptionalBytes(current.totalGzipSize),
+                    header: false
+                },
+                {
+                    data: baseline ? formatOptionalBytes(baseline.totalGzipSize) : formatOptionalBytes(current.totalGzipSize),
+                    header: false
+                },
+                {
+                    data: baseline ? calculateOptionalDiff(current.totalGzipSize, baseline.totalGzipSize) : '0',
                     header: false
                 }
             ],
@@ -97041,9 +97131,24 @@ var __webpack_exports__ = {};
                 }
             ]
         ];
+        if ('number' == typeof current.totalGzipSize || 'number' == typeof baseline?.totalGzipSize) reportTable.push([
+            {
+                data: '🗜️ Gzip Size',
+                header: false
+            },
+            {
+                data: formatOptionalBytes(current.totalGzipSize),
+                header: false
+            },
+            {
+                data: baseline ? formatOptionalBytes(baseline.totalGzipSize) : '0',
+                header: false
+            }
+        ]);
         await core.summary.addTable(reportTable).addSeparator();
         if (current.files && current.files.length > 0) {
             await core.summary.addHeading('📄 File Details', 3);
+            const hasFileGzipSize = current.files.some((file)=>'number' == typeof file.gzipSize);
             const fileTable = [
                 [
                     {
@@ -97053,7 +97158,13 @@ var __webpack_exports__ = {};
                     {
                         data: 'Size',
                         header: true
-                    }
+                    },
+                    ...hasFileGzipSize ? [
+                        {
+                            data: 'Gzip Size',
+                            header: true
+                        }
+                    ] : []
                 ]
             ];
             for (const file of current.files)fileTable.push([
@@ -97064,7 +97175,13 @@ var __webpack_exports__ = {};
                 {
                     data: formatBytes(file.size),
                     header: false
-                }
+                },
+                ...hasFileGzipSize ? [
+                    {
+                        data: formatOptionalBytes(file.gzipSize),
+                        header: false
+                    }
+                ] : []
             ]);
             await core.summary.addTable(fileTable);
         }
@@ -128740,6 +128857,25 @@ ${diffStr}
         if (r.error) throw r.error;
         if (0 !== r.status) throw new Error(`rsdoctor exited with code ${r.status}`);
     }
+    function hasBundleAnalysisChange(current, baseline) {
+        if (!baseline) return true;
+        const hasMetricChanged = (currentSize, baselineSize)=>{
+            if ('number' != typeof currentSize || 'number' != typeof baselineSize) return false;
+            if (0 === baselineSize || isNaN(baselineSize)) return false;
+            return currentSize - baselineSize !== 0;
+        };
+        return hasMetricChanged(current.totalSize, baseline.totalSize) || hasMetricChanged(current.totalGzipSize, baseline.totalGzipSize);
+    }
+    function formatGzipSize(analysis) {
+        return 'number' == typeof analysis.totalGzipSize ? formatBytes(analysis.totalGzipSize) : '-';
+    }
+    function calculateGzipDiff(current, baseline) {
+        if ('number' != typeof current.totalGzipSize || 'number' != typeof baseline?.totalGzipSize) return {
+            value: '-',
+            emoji: ''
+        };
+        return calculateDiff(current.totalGzipSize, baseline.totalGzipSize);
+    }
     function extractProjectName(filePath) {
         const relativePath = external_path_default().relative(process.cwd(), filePath);
         const pathParts = relativePath.split(external_path_default().sep);
@@ -128967,6 +129103,7 @@ ${diffStr}
             if (isPush) {
                 console.log('🔄 Detected push event to target branch - uploading artifacts');
                 for (const fullPath of matchedFiles){
+                    enrichRsdoctorDataWithGzip(fullPath);
                     const uploadResponse = await uploadArtifact(fullPath, currentCommitHash);
                     if ('number' != typeof uploadResponse.id) console.warn(`⚠️ Artifact upload failed for ${fullPath}`);
                     else console.log(`✅ Successfully uploaded artifact with ID: ${uploadResponse.id}`);
@@ -129004,6 +129141,7 @@ ${diffStr}
                     const report = await processSingleFile(fullPath, currentCommitHash, targetCommitHash, baselineUsedFallback, baselineLatestCommitHash, aiToken, aiModel);
                     projectReports.push(report);
                     if (isDispatch) {
+                        enrichRsdoctorDataWithGzip(fullPath);
                         const uploadResponse = await uploadArtifact(fullPath, currentCommitHash);
                         if ('number' != typeof uploadResponse.id) console.warn(`⚠️ Artifact upload failed for ${fullPath}`);
                         else console.log(`✅ Successfully uploaded artifact with ID: ${uploadResponse.id}`);
@@ -129035,17 +129173,8 @@ ${diffStr}
                 const reportsWithCurrent = projectReports.filter((r)=>r.current);
                 if (reportsWithCurrent.length > 1) {
                     let projectsWithChanges = 0;
-                    for (const report of reportsWithCurrent){
-                        if (!report.current) continue;
-                        if (!report.baseline) {
-                            projectsWithChanges++;
-                            continue;
-                        }
-                        const currentSize = report.current.totalSize;
-                        const baselineSize = report.baseline.totalSize;
-                        if (0 === baselineSize || isNaN(baselineSize)) continue;
-                        const diff = currentSize - baselineSize;
-                        if (0 !== diff) projectsWithChanges++;
+                    for (const report of reportsWithCurrent)if (report.current) {
+                        if (hasBundleAnalysisChange(report.current, report.baseline)) projectsWithChanges++;
                     }
                     const totalProjects = reportsWithCurrent.length;
                     const projectWord = 1 === totalProjects ? 'project' : 'projects';
@@ -129054,25 +129183,16 @@ ${diffStr}
                 }
                 if (reportsWithCurrent.length > 0) {
                     let hasChanges = false;
-                    for (const report of reportsWithCurrent){
-                        if (!report.current) continue;
-                        if (!report.baseline) {
-                            hasChanges = true;
-                            break;
-                        }
-                        const currentSize = report.current.totalSize;
-                        const baselineSize = report.baseline.totalSize;
-                        if (0 === baselineSize || isNaN(baselineSize)) continue;
-                        const diff = currentSize - baselineSize;
-                        if (0 !== diff) {
+                    for (const report of reportsWithCurrent)if (report.current) {
+                        if (hasBundleAnalysisChange(report.current, report.baseline)) {
                             hasChanges = true;
                             break;
                         }
                     }
                     const detailsTag = hasChanges ? '<details open>\n' : '<details>\n';
                     commentBody += `${detailsTag}<summary><b>📊 Quick Summary</b></summary>\n\n`;
-                    commentBody += '| Project | Total Size | Change |\n';
-                    commentBody += '|---------|------------|--------|\n';
+                    commentBody += '| Project | Total Size | Gzip Size | Change | Gzip Change |\n';
+                    commentBody += '|---------|------------|-----------|--------|-------------|\n';
                     for (const report of reportsWithCurrent){
                         if (!report.current) continue;
                         const currentSize = report.current.totalSize;
@@ -129082,18 +129202,14 @@ ${diffStr}
                             emoji: ''
                         };
                         const sizeStr = formatBytes(currentSize);
-                        commentBody += `| ${report.projectName} | ${sizeStr} | ${diff.emoji} ${diff.value} |\n`;
+                        const gzipDiff = calculateGzipDiff(report.current, report.baseline);
+                        commentBody += `| ${report.projectName} | ${sizeStr} | ${formatGzipSize(report.current)} | ${diff.emoji} ${diff.value} | ${gzipDiff.emoji} ${gzipDiff.value} |\n`;
                     }
                     commentBody += '\n</details>\n\n';
                 }
                 const hasSignificantChanges = (report)=>{
                     if (!report.current) return false;
-                    if (!report.baseline) return true;
-                    const currentSize = report.current.totalSize;
-                    const baselineSize = report.baseline.totalSize;
-                    if (0 === baselineSize || isNaN(baselineSize)) return false;
-                    const diff = currentSize - baselineSize;
-                    return 0 !== diff;
+                    return hasBundleAnalysisChange(report.current, report.baseline);
                 };
                 const reportsWithChanges = projectReports.filter((report)=>{
                     if (!report.current) return false;
