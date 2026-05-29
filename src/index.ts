@@ -2,7 +2,7 @@ import { setFailed, getInput, summary } from '@actions/core';
 import { uploadArtifact, hashPath } from './upload';
 import { downloadArtifactByCommitHash } from './download';
 import { GitHubService } from './github';
-import { loadSizeData, generateSizeReport, parseRsdoctorData, generateBundleAnalysisReport, BundleAnalysis, generateProjectMarkdown, formatBytes, calculateDiff } from './report';
+import { loadSizeData, generateSizeReport, parseRsdoctorData, generateBundleAnalysisReport, BundleAnalysis, generateProjectMarkdown, formatBytes, calculateDiff, enrichRsdoctorDataWithGzip } from './report';
 import { analyzeWithAI, AIAnalysisResult } from './ai-analysis';
 import path from 'path';
 import * as fs from 'fs';
@@ -101,6 +101,33 @@ interface ProjectReport {
   baselineUsedFallback?: boolean;
   baselineLatestCommitHash?: string;
   aiAnalysis?: AIAnalysisResult | null;
+}
+
+function hasBundleAnalysisChange(current: BundleAnalysis, baseline: BundleAnalysis | null): boolean {
+  if (!baseline) return true;
+
+  const hasMetricChanged = (currentSize?: number, baselineSize?: number): boolean => {
+    if (typeof currentSize !== 'number' || typeof baselineSize !== 'number') return false;
+    if (baselineSize === 0 || isNaN(baselineSize)) return false;
+    return currentSize - baselineSize !== 0;
+  };
+
+  return (
+    hasMetricChanged(current.totalSize, baseline.totalSize) ||
+    hasMetricChanged(current.totalGzipSize, baseline.totalGzipSize)
+  );
+}
+
+function formatGzipSize(analysis: BundleAnalysis): string {
+  return typeof analysis.totalGzipSize === 'number' ? formatBytes(analysis.totalGzipSize) : '-';
+}
+
+function calculateGzipDiff(current: BundleAnalysis, baseline?: BundleAnalysis | null): { value: string; emoji: string } {
+  if (typeof current.totalGzipSize !== 'number' || typeof baseline?.totalGzipSize !== 'number') {
+    return { value: '-', emoji: '' };
+  }
+
+  return calculateDiff(current.totalGzipSize, baseline.totalGzipSize);
 }
 
 export function extractProjectName(filePath: string): string {
@@ -388,6 +415,7 @@ async function processSingleFile(
       console.log('🔄 Detected push event to target branch - uploading artifacts');
       
       for (const fullPath of matchedFiles) {
+        enrichRsdoctorDataWithGzip(fullPath);
         const uploadResponse = await uploadArtifact(fullPath, currentCommitHash);
         
         if (typeof uploadResponse.id !== 'number') {
@@ -452,6 +480,7 @@ async function processSingleFile(
         
         // For workflow_dispatch, also upload artifacts
         if (isDispatch) {
+          enrichRsdoctorDataWithGzip(fullPath);
           const uploadResponse = await uploadArtifact(fullPath, currentCommitHash);
           if (typeof uploadResponse.id !== 'number') {
             console.warn(`⚠️ Artifact upload failed for ${fullPath}`);
@@ -513,15 +542,7 @@ async function processSingleFile(
         let projectsWithChanges = 0;
         for (const report of reportsWithCurrent) {
           if (!report.current) continue;
-          if (!report.baseline) {
-            projectsWithChanges++;
-            continue;
-          }
-          const currentSize = report.current.totalSize;
-          const baselineSize = report.baseline.totalSize;
-          if (baselineSize === 0 || isNaN(baselineSize)) continue;
-          const diff = currentSize - baselineSize;
-          if (diff !== 0) {
+          if (hasBundleAnalysisChange(report.current, report.baseline)) {
             projectsWithChanges++;
           }
         }
@@ -538,16 +559,7 @@ async function processSingleFile(
         let hasChanges = false;
         for (const report of reportsWithCurrent) {
           if (!report.current) continue;
-          if (!report.baseline) {
-            hasChanges = true; // No baseline means we can't compare, show it
-            break;
-          }
-          const currentSize = report.current.totalSize;
-          const baselineSize = report.baseline.totalSize;
-          if (baselineSize === 0 || isNaN(baselineSize)) continue;
-          const diff = currentSize - baselineSize;
-          // Show if there's any non-zero change
-          if (diff !== 0) {
+          if (hasBundleAnalysisChange(report.current, report.baseline)) {
             hasChanges = true;
             break;
           }
@@ -556,8 +568,8 @@ async function processSingleFile(
         // Use 'open' attribute if there are changes, otherwise keep it collapsed
         const detailsTag = hasChanges ? '<details open>\n' : '<details>\n';
         commentBody += `${detailsTag}<summary><b>📊 Quick Summary</b></summary>\n\n`;
-        commentBody += '| Project | Total Size | Change |\n';
-        commentBody += '|---------|------------|--------|\n';
+        commentBody += '| Project | Total Size | Gzip Size | Change | Gzip Change |\n';
+        commentBody += '|---------|------------|-----------|--------|-------------|\n';
         
         for (const report of reportsWithCurrent) {
           if (!report.current) continue;
@@ -565,7 +577,8 @@ async function processSingleFile(
           const baselineSize = report.baseline?.totalSize || 0;
           const diff = report.baseline ? calculateDiff(currentSize, baselineSize) : { value: '-', emoji: '' };
           const sizeStr = formatBytes(currentSize);
-          commentBody += `| ${report.projectName} | ${sizeStr} | ${diff.emoji} ${diff.value} |\n`;
+          const gzipDiff = calculateGzipDiff(report.current, report.baseline);
+          commentBody += `| ${report.projectName} | ${sizeStr} | ${formatGzipSize(report.current)} | ${diff.emoji} ${diff.value} | ${gzipDiff.emoji} ${gzipDiff.value} |\n`;
         }
         
         commentBody += '\n</details>\n\n';
@@ -575,13 +588,7 @@ async function processSingleFile(
 
       const hasSignificantChanges = (report: ProjectReport): boolean => {
         if (!report.current) return false;
-        if (!report.baseline) return true; // No baseline means we can't compare, show it
-        const currentSize = report.current.totalSize;
-        const baselineSize = report.baseline.totalSize;
-        if (baselineSize === 0 || isNaN(baselineSize)) return false;
-        const diff = currentSize - baselineSize;
-        // Show detailed report if there's any change (not zero)
-        return diff !== 0;
+        return hasBundleAnalysisChange(report.current, report.baseline);
       };
       
       // Filter reports with changes

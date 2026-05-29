@@ -17,6 +17,9 @@ describe('Report Module', () => {
       expect(result?.totalSize).toBe(62914560);
       expect(result?.jsSize).toBe(52428800);
       expect(result?.cssSize).toBe(10485760);
+      expect(result?.totalGzipSize).toBe(11534336);
+      expect(result?.jsGzipSize).toBe(10485760);
+      expect(result?.cssGzipSize).toBe(1048576);
       expect(result?.assets).toHaveLength(2);
       expect(result?.chunks).toHaveLength(1);
     });
@@ -46,6 +49,7 @@ describe('Report Module', () => {
       cssSize: 256 * 1024,    // 256KB
       htmlSize: 128 * 1024,   // 128KB
       otherSize: 128 * 1024,  // 128KB
+      totalGzipSize: 384 * 1024, // 384KB
       assets: [],
       chunks: [],
     };
@@ -55,6 +59,7 @@ describe('Report Module', () => {
       expect(markdown).toContain('### 📁 test-project');
       expect(markdown).toContain('**Path:** `path/to/file.json`');
       expect(markdown).toContain('1.0 MB');
+      expect(markdown).toContain('384.0 KB');
       expect(markdown).toContain('512.0 KB');
       expect(markdown).toContain('⚠️ **No baseline data found**');
       expect(markdown).toMatchSnapshot();
@@ -64,6 +69,7 @@ describe('Report Module', () => {
       const baseline = {
         ...mockAnalysis,
         totalSize: 512 * 1024, // 512KB (smaller)
+        totalGzipSize: 256 * 1024,
       };
       const markdown = generateProjectMarkdown('test-project', 'path/to/file.json', mockAnalysis, baseline);
       expect(markdown).toContain('### 📁 test-project');
@@ -86,6 +92,7 @@ describe('Report Module', () => {
       cssSize: 256 * 1024,
       htmlSize: 128 * 1024,
       otherSize: 128 * 1024,
+      totalGzipSize: 384 * 1024,
       assets: [],
       chunks: [],
     };
@@ -100,6 +107,7 @@ describe('Report Module', () => {
       const baseline = {
         ...mockAnalysis,
         totalSize: 512 * 1024,
+        totalGzipSize: 256 * 1024,
       };
       await generateBundleAnalysisReport(mockAnalysis, baseline);
       // GitHub Actions summary is mocked in setup.ts
@@ -107,4 +115,3 @@ describe('Report Module', () => {
     });
   });
 });
-

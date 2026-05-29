@@ -1,8 +1,11 @@
 import { summary } from '@actions/core';
 import * as fs from 'fs';
+import * as path from 'path';
+import { gzipSync } from 'zlib';
 
 export interface SizeData {
   totalSize: number;
+  totalGzipSize?: number;
   files: Array<{
     path: string;
     size: number;
@@ -18,6 +21,7 @@ export interface RsdoctorData {
         id: number;
         path: string;
         size: number;
+        gzipSize?: number;
         chunks: string[];
       }>;
       chunks: Array<{
@@ -37,9 +41,15 @@ export interface BundleAnalysis {
   cssSize: number;
   htmlSize: number;
   otherSize: number;
+  totalGzipSize?: number;
+  jsGzipSize?: number;
+  cssGzipSize?: number;
+  htmlGzipSize?: number;
+  otherGzipSize?: number;
   assets: Array<{
     path: string;
     size: number;
+    gzipSize?: number;
     type: 'js' | 'css' | 'html' | 'other';
   }>;
   chunks: Array<{
@@ -79,6 +89,69 @@ export function formatBytes(bytes: number): string {
   return `${isNegative ? '-' : ''}${value} ${sizes[i]}`;
 }
 
+function formatOptionalBytes(bytes?: number): string {
+  return typeof bytes === 'number' && !isNaN(bytes) ? formatBytes(bytes) : '-';
+}
+
+function calculateOptionalDiff(current?: number, baseline?: number): string {
+  if (typeof current !== 'number' || typeof baseline !== 'number') return '-';
+  return calculateDiff(current, baseline).value;
+}
+
+function resolveAssetPath(assetPath: string, dataFilePath: string): string | null {
+  const relativeDataPath = path.relative(process.cwd(), dataFilePath);
+  const isDownloadedArtifact = relativeDataPath.split(path.sep)[0] === 'temp-artifact';
+  const candidates = [
+    path.isAbsolute(assetPath) && !isDownloadedArtifact ? assetPath : null,
+    isDownloadedArtifact ? null : path.resolve(process.cwd(), assetPath),
+    path.resolve(path.dirname(dataFilePath), assetPath),
+    path.resolve(path.dirname(dataFilePath), '..', assetPath),
+  ].filter(Boolean) as string[];
+
+  return candidates.find(candidate => fs.existsSync(candidate)) || null;
+}
+
+function getAssetGzipSize(asset: { path: string; gzipSize?: number }, dataFilePath: string): number | undefined {
+  if (typeof asset.gzipSize === 'number' && !isNaN(asset.gzipSize)) {
+    return asset.gzipSize;
+  }
+
+  const assetPath = resolveAssetPath(asset.path, dataFilePath);
+  if (!assetPath) return undefined;
+
+  return gzipSync(fs.readFileSync(assetPath)).length;
+}
+
+export function enrichRsdoctorDataWithGzip(filePath: string): boolean {
+  try {
+    if (!fs.existsSync(filePath)) return false;
+
+    const data: RsdoctorData = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    const assets = data.data?.chunkGraph?.assets;
+    if (!Array.isArray(assets)) return false;
+
+    let updated = false;
+    for (const asset of assets) {
+      if (typeof asset.gzipSize === 'number' && !isNaN(asset.gzipSize)) continue;
+
+      const gzipSize = getAssetGzipSize(asset, filePath);
+      if (typeof gzipSize === 'number') {
+        asset.gzipSize = gzipSize;
+        updated = true;
+      }
+    }
+
+    if (updated) {
+      fs.writeFileSync(filePath, `${JSON.stringify(data, null, 2)}\n`);
+    }
+
+    return updated;
+  } catch (error) {
+    console.warn(`Failed to enrich rsdoctor data with gzip sizes from ${filePath}:`, error);
+    return false;
+  }
+}
+
 export function parseRsdoctorData(filePath: string): BundleAnalysis | null {
   try {
     if (!fs.existsSync(filePath)) {
@@ -103,27 +176,42 @@ export function parseRsdoctorData(filePath: string): BundleAnalysis | null {
     let cssSize = 0;
     let htmlSize = 0;
     let otherSize = 0;
+    let totalGzipSize = 0;
+    let jsGzipSize = 0;
+    let cssGzipSize = 0;
+    let htmlGzipSize = 0;
+    let otherGzipSize = 0;
+    let hasGzipSize = false;
 
-    const assetAnalysis = assets.reduce((acc: Array<{ path: string; size: number; type: 'js' | 'css' | 'html' | 'other' }>, asset) => {
+    const assetAnalysis = assets.reduce((acc: Array<{ path: string; size: number; gzipSize?: number; type: 'js' | 'css' | 'html' | 'other' }>, asset) => {
       if (excludedExtensions.some(ext => asset.path.endsWith(ext))) return acc;
 
       totalSize += asset.size;
+      const gzipSize = getAssetGzipSize(asset, filePath);
+      if (typeof gzipSize === 'number') {
+        totalGzipSize += gzipSize;
+        hasGzipSize = true;
+      }
 
       let type: 'js' | 'css' | 'html' | 'other' = 'other';
       if (asset.path.endsWith('.js')) {
         type = 'js';
         jsSize += asset.size;
+        if (typeof gzipSize === 'number') jsGzipSize += gzipSize;
       } else if (asset.path.endsWith('.css')) {
         type = 'css';
         cssSize += asset.size;
+        if (typeof gzipSize === 'number') cssGzipSize += gzipSize;
       } else if (asset.path.endsWith('.html')) {
         type = 'html';
         htmlSize += asset.size;
+        if (typeof gzipSize === 'number') htmlGzipSize += gzipSize;
       } else {
         otherSize += asset.size;
+        if (typeof gzipSize === 'number') otherGzipSize += gzipSize;
       }
 
-      acc.push({ path: asset.path, size: asset.size, type });
+      acc.push({ path: asset.path, size: asset.size, gzipSize, type });
       return acc;
     }, []);
     
@@ -139,6 +227,11 @@ export function parseRsdoctorData(filePath: string): BundleAnalysis | null {
       cssSize,
       htmlSize,
       otherSize,
+      totalGzipSize: hasGzipSize ? totalGzipSize : undefined,
+      jsGzipSize: hasGzipSize ? jsGzipSize : undefined,
+      cssGzipSize: hasGzipSize ? cssGzipSize : undefined,
+      htmlGzipSize: hasGzipSize ? htmlGzipSize : undefined,
+      otherGzipSize: hasGzipSize ? otherGzipSize : undefined,
       assets: assetAnalysis,
       chunks: chunkAnalysis
     };
@@ -159,6 +252,9 @@ export function loadSizeData(filePath: string): SizeData | null {
     
     if (!data.totalSize && data.files) {
       data.totalSize = data.files.reduce((sum: number, file: any) => sum + (file.size || 0), 0);
+    }
+    if (!data.totalGzipSize && data.files?.some((file: any) => typeof file.gzipSize === 'number')) {
+      data.totalGzipSize = data.files.reduce((sum: number, file: any) => sum + (file.gzipSize || 0), 0);
     }
     
     return data;
@@ -235,6 +331,7 @@ export function generateProjectMarkdown(
   markdown += '| Metric | Current | Baseline | Change |\n';
   markdown += '|--------|---------|----------|--------|\n';
   markdown += `| 📊 Total Size | ${formatBytes(current.totalSize)} | ${baseline ? formatBytes(baseline.totalSize) : '-'} | ${baseline ? calculateDiff(current.totalSize, baseline.totalSize).value : '-'} |\n`;
+  markdown += `| 🗜️ Gzip Size | ${formatOptionalBytes(current.totalGzipSize)} | ${baseline ? formatOptionalBytes(baseline.totalGzipSize) : '-'} | ${baseline ? calculateOptionalDiff(current.totalGzipSize, baseline.totalGzipSize) : '-'} |\n`;
   markdown += `| 📄 JavaScript | ${formatBytes(current.jsSize)} | ${baseline ? formatBytes(baseline.jsSize) : '-'} | ${baseline ? calculateDiff(current.jsSize, baseline.jsSize).value : '-'} |\n`;
   markdown += `| 🎨 CSS | ${formatBytes(current.cssSize)} | ${baseline ? formatBytes(baseline.cssSize) : '-'} | ${baseline ? calculateDiff(current.cssSize, baseline.cssSize).value : '-'} |\n`;
   markdown += `| 🌐 HTML | ${formatBytes(current.htmlSize)} | ${baseline ? formatBytes(baseline.htmlSize) : '-'} | ${baseline ? calculateDiff(current.htmlSize, baseline.htmlSize).value : '-'} |\n`;
@@ -285,6 +382,12 @@ export async function generateBundleAnalysisReport(
       { data: formatBytes(current.totalSize), header: false },
       { data: baseline ? formatBytes(baseline.totalSize) : formatBytes(current.totalSize), header: false },
       { data: baseline ? calculateDiff(current.totalSize, baseline.totalSize).value : '0', header: false }
+    ],
+    [
+      { data: '🗜️ Gzip Size', header: false },
+      { data: formatOptionalBytes(current.totalGzipSize), header: false },
+      { data: baseline ? formatOptionalBytes(baseline.totalGzipSize) : formatOptionalBytes(current.totalGzipSize), header: false },
+      { data: baseline ? calculateOptionalDiff(current.totalGzipSize, baseline.totalGzipSize) : '0', header: false }
     ],
     [
       { data: '📄 JavaScript', header: false },
@@ -341,6 +444,14 @@ export async function generateSizeReport(current: SizeData, baseline?: SizeData)
       { data: baseline ? formatBytes(baseline.totalSize) : '0', header: false }
     ]
   ];
+
+  if (typeof current.totalGzipSize === 'number' || typeof baseline?.totalGzipSize === 'number') {
+    reportTable.push([
+      { data: '🗜️ Gzip Size', header: false },
+      { data: formatOptionalBytes(current.totalGzipSize), header: false },
+      { data: baseline ? formatOptionalBytes(baseline.totalGzipSize) : '0', header: false }
+    ]);
+  }
   
   await summary
     .addTable(reportTable)
@@ -349,17 +460,20 @@ export async function generateSizeReport(current: SizeData, baseline?: SizeData)
   if (current.files && current.files.length > 0) {
     await summary.addHeading('📄 File Details', 3);
     
+    const hasFileGzipSize = current.files.some(file => typeof file.gzipSize === 'number');
     const fileTable = [
       [
         { data: 'File', header: true },
-        { data: 'Size', header: true }
+        { data: 'Size', header: true },
+        ...(hasFileGzipSize ? [{ data: 'Gzip Size', header: true }] : [])
       ]
     ];
     
     for (const file of current.files) {
       fileTable.push([
         { data: file.path, header: false },
-        { data: formatBytes(file.size), header: false }
+        { data: formatBytes(file.size), header: false },
+        ...(hasFileGzipSize ? [{ data: formatOptionalBytes(file.gzipSize), header: false }] : [])
       ]);
     }
     

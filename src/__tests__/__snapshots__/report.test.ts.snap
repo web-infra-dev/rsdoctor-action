@@ -10,6 +10,7 @@ exports[`Report Module > generateProjectMarkdown > should generate markdown with
 | Metric | Current | Baseline | Change |
 |--------|---------|----------|--------|
 | 📊 Total Size | 1.0 MB | - | - |
+| 🗜️ Gzip Size | 384.0 KB | - | - |
 | 📄 JavaScript | 512.0 KB | - | - |
 | 🎨 CSS | 256.0 KB | - | - |
 | 🌐 HTML | 128.0 KB | - | - |
