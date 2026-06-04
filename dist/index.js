@@ -129019,7 +129019,7 @@ ${diffStr}
             } catch (e) {
                 console.warn(`⚠️ Failed to upload diff html for ${projectName}: ${e}`);
             }
-            if (aiToken) try {
+            if (aiToken && hasBundleAnalysisChange(currentBundleAnalysis, report.baseline)) try {
                 const diffJsonPath = external_path_default().join(tempOutDir, `rsdoctor-diff-${projectName}.json`);
                 const defaultDiffJsonPath = external_path_default().join(tempOutDir, 'rsdoctor-diff.json');
                 try {
@@ -129056,6 +129056,7 @@ ${diffStr}
             } catch (e) {
                 console.warn(`⚠️ Failed to generate JSON diff for AI analysis: ${e}`);
             }
+            else if (aiToken) console.log(`ℹ️  No bundle changes detected for ${projectName}, skipping AI analysis`);
         } catch (e) {
             console.warn(`⚠️ rsdoctor bundle-diff failed for ${projectName}: ${e}`);
         }
