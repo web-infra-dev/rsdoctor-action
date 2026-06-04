@@ -306,7 +306,7 @@ async function processSingleFile(
       }
 
       // Generate JSON diff for AI analysis (requires @rsdoctor/cli >= 1.5.6-canary.0)
-      if (aiToken) {
+      if (aiToken && hasBundleAnalysisChange(currentBundleAnalysis, report.baseline)) {
         try {
           const diffJsonPath = path.join(tempOutDir, `rsdoctor-diff-${projectName}.json`);
           const defaultDiffJsonPath = path.join(tempOutDir, 'rsdoctor-diff.json');
@@ -341,6 +341,8 @@ async function processSingleFile(
         } catch (e) {
           console.warn(`⚠️ Failed to generate JSON diff for AI analysis: ${e}`);
         }
+      } else if (aiToken) {
+        console.log(`ℹ️  No bundle changes detected for ${projectName}, skipping AI analysis`);
       }
     } catch (e) {
       console.warn(`⚠️ rsdoctor bundle-diff failed for ${projectName}: ${e}`);
