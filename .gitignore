@@ -1,4 +1,8 @@
 node_modules
+!dist/node_modules/
+!dist/node_modules/@rsdoctor/
+!dist/node_modules/@rsdoctor/client/
+!dist/node_modules/@rsdoctor/client/**
 .DS_Store
 
 dist/index.js.LICENSE.txt

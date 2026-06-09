@@ -4,7 +4,7 @@
   "description": "An Rsdoctor gitHub action for bundle size analysis and reporting",
   "main": "./dist/index.js",
   "scripts": {
-    "build": "rslib build",
+    "build": "rslib build && node scripts/copy-rsdoctor-client.mjs",
     "diff": "npx rsdoctor bundle-diff --html --baseline=examples/rsbuild-demo/dist/.rsdoctor/rsdoctor-data.json --current=examples/rsbuild-demo/dist/.rsdoctor/rsdoctor-data.json",
     "lint": "rslint",
     "lint:fix": "rslint --fix",
@@ -47,9 +47,9 @@
     "@actions/core": "^1.2.6",
     "@actions/github": "^4.0.0",
     "@playwright/test": "^1.42.1",
-    "@rsdoctor/cli": "1.5.8",
-    "@rsdoctor/client": "1.5.8",
-    "@rslib/core": "^0.16.0",
+    "@rsdoctor/cli": "1.5.12",
+    "@rsdoctor/client": "1.5.12",
+    "@rslib/core": "^0.22.0",
     "@rslint/core": "^0.5.1",
     "@rstest/core": "^0.5.4",
     "@types/node": "^24.5.2",
@@ -59,9 +59,5 @@
     "mock-fs": "^5.2.0",
     "nock": "^13.5.4",
     "yauzl": "^3.2.0"
-  },
-  "overrides": {
-    "@rsdoctor/client": "1.5.8"
-  },
-  "packageManager": "pnpm@9.15.9+sha512.68046141893c66fad01c079231128e9afb89ef87e2691d69e4d40eee228988295fd4682181bae55b58418c3a253bde65a505ec7c5f9403ece5cc3cd37dcf2531"
+  }
 }
