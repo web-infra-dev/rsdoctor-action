@@ -81,4 +81,4 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           file_path: 'examples/**/*/.rsdoctor/rsdoctor-data.json'
           target_branch: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref || github.event.inputs.target_branch || github.event.repository.default_branch }}
-          ai_model: 'qwen3.5-plus'
+          ai_model: 'qwen3.7-max'
