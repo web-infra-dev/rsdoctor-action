@@ -3,14 +3,10 @@ import { uploadArtifact, hashPath } from './upload';
 import { downloadArtifactByCommitHash } from './download';
 import { GitHubService } from './github';
 import { loadSizeData, generateSizeReport, parseRsdoctorData, generateBundleAnalysisReport, BundleAnalysis, generateProjectMarkdown, formatBytes, calculateDiff, enrichRsdoctorDataWithGzip } from './report';
-import { analyzeWithAI, AIAnalysisResult } from './ai-analysis';
+import type { AIAnalysisResult } from './ai-analysis';
 import path from 'path';
 import * as fs from 'fs';
-import { execFile } from 'child_process';
-import { promisify } from 'util';
-import { spawnSync } from 'child_process';
 import fg from 'fast-glob';
-const execFileAsync = promisify(execFile);
 
 function isPullRequestEvent(): boolean {
   const { context } = require('@actions/github');
@@ -80,13 +76,17 @@ function isWorkflowDispatchEvent(): boolean {
   return false;
 }
 
-function runRsdoctorViaNode(requirePath: string, args: string[] = []) {
-  const nodeExec = process.execPath;
-  console.log('process.execPath =', nodeExec);
-  console.log('Running:', nodeExec, requirePath, args.join(' '));
-  const r = spawnSync(nodeExec, [requirePath, ...args], { stdio: 'inherit' });
-  if (r.error) throw r.error;
-  if (r.status !== 0) throw new Error(`rsdoctor exited with code ${r.status}`);
+async function runRsdoctorBundleDiff(options: {
+  baseline: string;
+  current: string;
+  html?: boolean;
+  json?: boolean | string;
+  output?: string;
+}) {
+  const { execute: executeRsdoctor } = await import(
+    /* webpackChunkName: "rsdoctor-cli" */ '@rsdoctor/cli'
+  );
+  await executeRsdoctor('bundle-diff', options);
 }
 
 interface ProjectReport {
@@ -254,43 +254,23 @@ async function processSingleFile(
       const tempOutDir = process.cwd();
       const targetArtifactName = `${pathParts.join('-')}-${fileNameWithoutExt}-${targetCommitHash}${fileExt}`;
       console.log(`🔍 Looking for target artifact: ${pathParts.join('-')}-${fileNameWithoutExt}-${targetCommitHash}${fileExt}`);
-      
-      try {
-        const cliEntry = require.resolve('@rsdoctor/cli', { paths: [process.cwd()] });
-        const binCliEntry = path.join(path.dirname(path.dirname(cliEntry)), 'bin', 'rsdoctor');
-        console.log(`🔍 Found rsdoctor CLI at: ${binCliEntry}`);
-        
-        runRsdoctorViaNode(binCliEntry, [
-          'bundle-diff', 
-          '--html', 
-          `--baseline=${baselineJsonPath}`, 
-          `--current=${fullPath}`
-        ]);
-      } catch (e) {
-        console.log(`⚠️ rsdoctor CLI not found in node_modules: ${e}`);
-        
-        try {
-          const shellCmd = `npx @rsdoctor/cli bundle-diff --html --baseline="${baselineJsonPath}" --current="${fullPath}"`;
-          console.log(`🛠️ Running rsdoctor via npx: ${shellCmd}`);
-          await execFileAsync('sh', ['-c', shellCmd], { cwd: tempOutDir });
-        } catch (npxError) {
-          console.log(`⚠️ npx approach also failed: ${npxError}`);
-        }
-      }
 
       const safeProjectName = projectName.replace(/\//g, '-');
       const diffHtmlPath = path.join(tempOutDir, `rsdoctor-diff-${safeProjectName}.html`);
-      const defaultDiffPath = path.join(tempOutDir, 'rsdoctor-diff.html');
-      if (fs.existsSync(defaultDiffPath)) {
-        try {
-          await fs.promises.rename(defaultDiffPath, diffHtmlPath);
-        } catch (e) {
-          report.diffHtmlPath = defaultDiffPath;
-        }
+
+      try {
+        await runRsdoctorBundleDiff({
+          baseline: baselineJsonPath,
+          current: fullPath,
+          html: true,
+          output: diffHtmlPath,
+        });
+      } catch (e) {
+        console.log(`⚠️ Failed to generate rsdoctor HTML diff: ${e}`);
       }
       
       if (!report.diffHtmlPath) {
-        report.diffHtmlPath = fs.existsSync(diffHtmlPath) ? diffHtmlPath : defaultDiffPath;
+        report.diffHtmlPath = diffHtmlPath;
       }
       
       if (fs.existsSync(report.diffHtmlPath)) {
@@ -308,36 +288,23 @@ async function processSingleFile(
       // Generate JSON diff for AI analysis (requires @rsdoctor/cli >= 1.5.6-canary.0)
       if (aiToken && hasBundleAnalysisChange(currentBundleAnalysis, report.baseline)) {
         try {
-          const diffJsonPath = path.join(tempOutDir, `rsdoctor-diff-${projectName}.json`);
-          const defaultDiffJsonPath = path.join(tempOutDir, 'rsdoctor-diff.json');
+          const diffJsonPath = path.join(tempOutDir, `rsdoctor-diff-${safeProjectName}.json`);
 
           try {
-            const cliEntry = require.resolve('@rsdoctor/cli', { paths: [process.cwd()] });
-            const binCliEntry = path.join(path.dirname(path.dirname(cliEntry)), 'bin', 'rsdoctor');
-            runRsdoctorViaNode(binCliEntry, [
-              'bundle-diff',
-              '--json',
-              `--baseline=${baselineJsonPath}`,
-              `--current=${fullPath}`,
-            ]);
+            await runRsdoctorBundleDiff({
+              baseline: baselineJsonPath,
+              current: fullPath,
+              json: diffJsonPath,
+            });
           } catch (e) {
-            console.log(`⚠️ rsdoctor CLI (json) not found in node_modules: ${e}`);
-            try {
-              const shellCmd = `npx @rsdoctor/cli bundle-diff --json --baseline="${baselineJsonPath}" --current="${fullPath}"`;
-              console.log(`🛠️ Running rsdoctor --json via npx: ${shellCmd}`);
-              await execFileAsync('sh', ['-c', shellCmd], { cwd: tempOutDir });
-            } catch (npxError) {
-              console.log(`⚠️ npx approach (json) also failed: ${npxError}`);
-            }
+            console.log(`⚠️ Failed to generate rsdoctor JSON diff: ${e}`);
+            return report;
           }
 
-          // Rename default output to project-specific name to avoid collisions in monorepo
-          if (fs.existsSync(defaultDiffJsonPath) && !fs.existsSync(diffJsonPath)) {
-            await fs.promises.rename(defaultDiffJsonPath, diffJsonPath);
-          }
-
-          const resolvedJsonPath = fs.existsSync(diffJsonPath) ? diffJsonPath : defaultDiffJsonPath;
-          report.aiAnalysis = await analyzeWithAI(resolvedJsonPath, aiToken, aiModel);
+          const { analyzeWithAI } = await import(
+            /* webpackChunkName: "ai-analysis" */ './ai-analysis'
+          );
+          report.aiAnalysis = await analyzeWithAI(diffJsonPath, aiToken, aiModel);
         } catch (e) {
           console.warn(`⚠️ Failed to generate JSON diff for AI analysis: ${e}`);
         }

@@ -1,4 +1,3 @@
-import { DefaultArtifactClient } from '@actions/artifact';
 import path from 'path';
 import * as fs from 'fs';
 import { execSync } from 'child_process';
@@ -16,6 +15,9 @@ export function createArtifactName(pathHash: string, commitHash: string): string
 }
 
 export async function uploadArtifact(filePath: string, commitHash?: string) {
+  const { DefaultArtifactClient } = await import(
+    /* webpackChunkName: "actions-artifact" */ '@actions/artifact'
+  );
   const artifactClient = new DefaultArtifactClient();
 
   const hash = commitHash || execSync('git rev-parse --short=10 HEAD', { encoding: 'utf8' }).trim();
