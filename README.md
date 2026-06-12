@@ -54,6 +54,10 @@ export default defineConfig({
     #
     # Example with a static target branch:
     target_branch: 'main'
+
+    # Optional: process multiple Rsdoctor JSON files in parallel (defaults to 4).
+    # Set to 1 to keep the old sequential behavior.
+    concurrency: '4'
 ```
 
 ### Input Parameters
@@ -62,6 +66,7 @@ export default defineConfig({
 |-----------|-------------|----------|---------|
 | `file_path` | Path to Rsdoctor JSON data file | Yes | - |
 | `target_branch` | Target branch for baseline comparison | No | `main` |
+| `concurrency` | Number of Rsdoctor JSON files to process in parallel for PR and workflow_dispatch comparisons | No | `4` |
 
 > AI-assisted analysis reads `AI_TOKEN` from the action step environment. Store it as a GitHub Actions secret in repository settings, then pass it to the step with `AI_TOKEN: ${{ secrets.AI_TOKEN }}`.
 

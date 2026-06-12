@@ -4,16 +4,15 @@ import { GitHubService } from './github';
 import * as yauzl from 'yauzl';
 import { createArtifactName, hashPath } from './upload';
 
-export async function downloadArtifact(artifactId: number, fileName: string) {
+export async function downloadArtifact(artifactId: number, fileName: string, githubService = new GitHubService()) {
   console.log(`📥 Downloading artifact ID: ${artifactId}`);
-  
-  const githubService = new GitHubService();
   
   try {
     const downloadResponse = await githubService.downloadArtifact(artifactId);
     
-    const tempDir = path.join(process.cwd(), 'temp-artifact');
-    await fs.promises.mkdir(tempDir, { recursive: true });
+    const tempRoot = path.join(process.cwd(), 'temp-artifacts');
+    await fs.promises.mkdir(tempRoot, { recursive: true });
+    const tempDir = await fs.promises.mkdtemp(path.join(tempRoot, `${artifactId}-`));
     
     const zipPath = path.join(tempDir, 'artifact.zip');
     const buffer = Buffer.from(downloadResponse);
@@ -78,6 +77,7 @@ export async function downloadArtifact(artifactId: number, fileName: string) {
     
     return {
       downloadPath: tempDir,
+      filePath: targetFilePath,
       jsonData: jsonData
     };
     
@@ -90,15 +90,14 @@ export async function downloadArtifact(artifactId: number, fileName: string) {
 export async function downloadArtifactByCommitHash(
   commitHash: string, 
   fileName: string,
-  filePath: string
+  filePath: string,
+  githubService = new GitHubService(),
 ) {
   if (!filePath) {
     throw new Error('filePath is required for artifact download');
   }
   
   console.log(`🔍 Looking for artifact with commit hash: ${commitHash}`);
-  
-  const githubService = new GitHubService();
   
   // Calculate path hash and search for exact match
   const relativePath = path.relative(process.cwd(), filePath);
@@ -207,7 +206,7 @@ export async function downloadArtifactByCommitHash(
   console.log(`📥 Downloading artifact...`);
 
   try {
-    return await downloadArtifact(artifact.id, fileName);
+    return await downloadArtifact(artifact.id, fileName, githubService);
   } catch (downloadError) {
     console.error(`❌ Download failed with error: ${downloadError}`);
     console.error(`💡 This usually means:`);

@@ -103,6 +103,48 @@ interface ProjectReport {
   aiAnalysis?: AIAnalysisResult | null;
 }
 
+interface ProcessSingleFileContext {
+  githubService: GitHubService;
+  baselinePRs?: Array<{ number: number; title: string; url: string }>;
+  aiToken?: string;
+  aiModel?: string;
+}
+
+function parseConcurrency(value: string | undefined, defaultValue = 4): number {
+  if (!value) return defaultValue;
+
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    console.warn(`⚠️ Invalid concurrency value "${value}", using ${defaultValue}`);
+    return defaultValue;
+  }
+
+  return Math.floor(parsed);
+}
+
+async function runWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  if (items.length === 0) return [];
+
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+  const workerCount = Math.min(concurrency, items.length);
+
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      while (nextIndex < items.length) {
+        const currentIndex = nextIndex++;
+        results[currentIndex] = await worker(items[currentIndex], currentIndex);
+      }
+    }),
+  );
+
+  return results;
+}
+
 function hasBundleAnalysisChange(current: BundleAnalysis, baseline: BundleAnalysis | null): boolean {
   if (!baseline) return true;
 
@@ -181,9 +223,11 @@ async function processSingleFile(
   targetCommitHash: string | null,
   baselineUsedFallback?: boolean,
   baselineLatestCommitHash?: string,
-  aiToken?: string,
-  aiModel?: string,
+  context?: ProcessSingleFileContext,
 ): Promise<ProjectReport> {
+  const githubService = context?.githubService || new GitHubService();
+  const aiToken = context?.aiToken || '';
+  const aiModel = context?.aiModel;
   const fileName = path.basename(fullPath);
   const relativePath = path.relative(process.cwd(), fullPath);
   const pathParts = relativePath.split(path.sep);
@@ -215,8 +259,8 @@ async function processSingleFile(
     try {
       console.log(`📥 Attempting to download baseline for ${projectName}...`);
       // Pass filePath to ensure we download the correct artifact by path hash
-      const downloadResult = await downloadArtifactByCommitHash(targetCommitHash, fileName, fullPath);
-      baselineJsonPath = path.join(downloadResult.downloadPath, fileName);
+      const downloadResult = await downloadArtifactByCommitHash(targetCommitHash, fileName, fullPath, githubService);
+      baselineJsonPath = downloadResult.filePath || path.join(downloadResult.downloadPath, fileName);
       
       console.log(`📁 Downloaded baseline file path: ${baselineJsonPath}`);
       const baselineBundleAnalysis = parseRsdoctorData(baselineJsonPath);
@@ -226,16 +270,11 @@ async function processSingleFile(
         report.baselineUsedFallback = baselineUsedFallback;
         report.baselineLatestCommitHash = baselineLatestCommitHash;
         
-        // Try to find associated PRs for the baseline commit
-        try {
-          const githubService = new GitHubService();
-          baselinePRs = await githubService.findPRsByCommit(targetCommitHash);
+        if (context?.baselinePRs) {
+          baselinePRs = context.baselinePRs;
           if (baselinePRs.length > 0) {
             report.baselinePRs = baselinePRs;
-            console.log(`📎 Found ${baselinePRs.length} PR(s) associated with baseline commit ${targetCommitHash}`);
           }
-        } catch (prError) {
-          console.log(`ℹ️  Could not find PRs for baseline commit: ${prError}`);
         }
         
         console.log(`✅ Successfully downloaded and parsed baseline for ${projectName}`);
@@ -351,10 +390,12 @@ async function processSingleFile(
     if (aiToken) {
       console.log(`🤖 AI analysis enabled (model: ${aiModel})`);
     }
+    const concurrency = parseConcurrency(getInput('concurrency'));
 
     let targetCommitHash: string | null = null;
     let baselineUsedFallback = false;
     let baselineLatestCommitHash: string | undefined = undefined;
+    let baselinePRs: Array<{ number: number; title: string; url: string }> | undefined;
     
     const isPush = isPushEvent();
     const isPR = isPullRequestEvent();
@@ -371,6 +412,15 @@ async function processSingleFile(
         console.log(`✅ Target branch commit hash: ${targetCommitHash}`);
         if (baselineUsedFallback && baselineLatestCommitHash) {
           console.log(`⚠️  Using fallback commit: ${targetCommitHash} (latest: ${baselineLatestCommitHash})`);
+        }
+
+        try {
+          baselinePRs = await githubService.findPRsByCommit(targetCommitHash);
+          if (baselinePRs.length > 0) {
+            console.log(`📎 Found ${baselinePRs.length} PR(s) associated with baseline commit ${targetCommitHash}`);
+          }
+        } catch (prError) {
+          console.log(`ℹ️  Could not find PRs for baseline commit: ${prError}`);
         }
       } catch (error) {
         console.error(`❌ Failed to get target branch commit: ${error}`);
@@ -442,11 +492,18 @@ async function processSingleFile(
       } else {
         console.log('📥 Detected pull request event - processing files');
       }
-      
+
+      console.log(`⚙️ Processing ${matchedFiles.length} file(s) with concurrency: ${Math.min(concurrency, matchedFiles.length)}`);
+      const reports = await runWithConcurrency(matchedFiles, concurrency, (fullPath) => processSingleFile(fullPath, currentCommitHash, targetCommitHash, baselineUsedFallback, baselineLatestCommitHash, {
+          githubService,
+          baselinePRs,
+          aiToken,
+          aiModel,
+        }),
+      );
+      projectReports.push(...reports);
+
       for (const fullPath of matchedFiles) {
-        const report = await processSingleFile(fullPath, currentCommitHash, targetCommitHash, baselineUsedFallback, baselineLatestCommitHash, aiToken, aiModel);
-        projectReports.push(report);
-        
         // For workflow_dispatch, also upload artifacts
         if (isDispatch) {
           enrichRsdoctorDataWithGzip(fullPath);

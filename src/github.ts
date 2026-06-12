@@ -41,6 +41,10 @@ interface ApiError extends Error {
 export class GitHubService {
   private octokit: any;
   private repository: Repository;
+  private workflowRunsByCommitCache = new Map<string, Promise<any[]> | any[]>();
+  private workflowRunArtifactsCache = new Map<number, Promise<any> | any>();
+  private repositoryArtifactsCache?: Promise<any> | any;
+  private prsByCommitCache = new Map<string, Promise<Array<{ number: number; title: string; url: string }>> | Array<{ number: number; title: string; url: string }>>();
 
   constructor() {
     this.octokit = getOctokit(getInput('github_token', { required: true }));
@@ -310,15 +314,28 @@ export class GitHubService {
   }
 
   async listArtifacts() {
+    if (this.repositoryArtifactsCache) {
+      console.log('♻️  Reusing cached repository artifacts');
+      return await this.repositoryArtifactsCache;
+    }
+
     const { owner, repo } = this.repository;
     
-    const artifactsResponse = await this.octokit.rest.actions.listArtifactsForRepo({
+    const artifactsPromise = this.octokit.rest.actions.listArtifactsForRepo({
       owner,
       repo,
       per_page: 100
-    });
+    }).then((response: any) => response.data);
+    this.repositoryArtifactsCache = artifactsPromise;
 
-    return artifactsResponse.data;
+    try {
+      const artifacts = await artifactsPromise;
+      this.repositoryArtifactsCache = artifacts;
+      return artifacts;
+    } catch (error) {
+      this.repositoryArtifactsCache = undefined;
+      throw error;
+    }
   }
 
   /**
@@ -373,8 +390,22 @@ export class GitHubService {
    */
   async findAllWorkflowRunsByCommit(commitHash: string, status: 'completed' | 'in_progress' | 'queued' | 'requested' = 'completed') {
     const { owner, repo } = this.repository;
-    
-    try {
+    const cacheKey = `${status}:${commitHash}`;
+    const cachedRuns = this.workflowRunsByCommitCache.get(cacheKey);
+    if (cachedRuns) {
+      try {
+        const runs = await cachedRuns;
+        console.log(`♻️  Reusing ${runs.length} cached workflow run(s) for commit ${commitHash}`);
+        return runs;
+      } catch (error) {
+        this.workflowRunsByCommitCache.delete(cacheKey);
+        const apiError = error as ApiError;
+        console.warn(`⚠️  Failed to find workflow runs for commit ${commitHash}: ${apiError.message}`);
+        return [];
+      }
+    }
+
+    const runsPromise = (async () => {
       // First try to find by exact commit hash
       const runsResponse = await this.octokit.rest.actions.listWorkflowRunsForRepo({
         owner,
@@ -403,7 +434,15 @@ export class GitHubService {
       ) || [];
 
       return matchingRuns;
+    })();
+    this.workflowRunsByCommitCache.set(cacheKey, runsPromise);
+
+    try {
+      const runs = await runsPromise;
+      this.workflowRunsByCommitCache.set(cacheKey, runs);
+      return runs;
     } catch (error) {
+      this.workflowRunsByCommitCache.delete(cacheKey);
       const apiError = error as ApiError;
       console.warn(`⚠️  Failed to find workflow runs for commit ${commitHash}: ${apiError.message}`);
       return [];
@@ -416,16 +455,25 @@ export class GitHubService {
    */
   async listArtifactsForWorkflowRun(runId: number) {
     const { owner, repo } = this.repository;
+    const cachedArtifacts = this.workflowRunArtifactsCache.get(runId);
+    if (cachedArtifacts) {
+      console.log(`♻️  Reusing cached artifacts for workflow run ${runId}`);
+      return await cachedArtifacts;
+    }
     
-    try {
-      const artifactsResponse = await this.octokit.rest.actions.listWorkflowRunArtifacts({
+    const artifactsPromise = this.octokit.rest.actions.listWorkflowRunArtifacts({
         owner,
         repo,
         run_id: runId
-      });
+    }).then((response: any) => response.data);
+    this.workflowRunArtifactsCache.set(runId, artifactsPromise);
 
-      return artifactsResponse.data;
+    try {
+      const artifacts = await artifactsPromise;
+      this.workflowRunArtifactsCache.set(runId, artifacts);
+      return artifacts;
     } catch (error) {
+      this.workflowRunArtifactsCache.delete(runId);
       const apiError = error as ApiError;
       console.warn(`⚠️  Failed to list artifacts for workflow run ${runId}: ${apiError.message}`);
       throw error;
@@ -488,20 +536,41 @@ export class GitHubService {
    */
   async findPRsByCommit(commitHash: string): Promise<Array<{ number: number; title: string; url: string }>> {
     const { owner, repo } = this.repository;
+    const cachedPRs = this.prsByCommitCache.get(commitHash);
+    if (cachedPRs) {
+      try {
+        const prs = await cachedPRs;
+        console.log(`♻️  Reusing ${prs.length} cached PR(s) for commit ${commitHash}`);
+        return prs;
+      } catch (error) {
+        this.prsByCommitCache.delete(commitHash);
+        console.warn(`⚠️  Failed to find PRs for commit ${commitHash}: ${error}`);
+        return [];
+      }
+    }
     
-    try {
+    const prsPromise = (async () => {
       const { data: prs } = await this.octokit.rest.repos.listPullRequestsAssociatedWithCommit({
         owner,
         repo,
         commit_sha: commitHash,
       });
       
-      return prs.map((pr: any) => ({
+      const mappedPRs = prs.map((pr: any) => ({
         number: pr.number,
         title: pr.title,
         url: pr.html_url
       }));
+      return mappedPRs;
+    })();
+    this.prsByCommitCache.set(commitHash, prsPromise);
+
+    try {
+      const prs = await prsPromise;
+      this.prsByCommitCache.set(commitHash, prs);
+      return prs;
     } catch (error) {
+      this.prsByCommitCache.delete(commitHash);
       console.warn(`⚠️  Failed to find PRs for commit ${commitHash}: ${error}`);
       return [];
     }

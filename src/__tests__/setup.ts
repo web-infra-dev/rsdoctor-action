@@ -17,6 +17,8 @@ rstest.mock('@actions/core', () => ({
         return 'dist/.rsdoctor/rsdoctor-data.json';
       case 'target_branch':
         return 'main';
+      case 'concurrency':
+        return '4';
       default:
         return '';
     }

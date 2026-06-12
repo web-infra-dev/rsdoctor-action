@@ -52,6 +52,9 @@ export default defineConfig({
     
     # 用于比较的目标分支（默认为 main）, 如果想用动态目标分支，而不仅仅是主分支，则可以使用 `target_branch: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref || github.event.repository.default_branch }}`
     target_branch: 'main' 
+
+    # 可选：并行处理多个 Rsdoctor JSON 文件（默认 4）。设置为 1 可保持原来的串行行为。
+    concurrency: '4'
 ```
 
 #### 输入参数
@@ -60,6 +63,7 @@ export default defineConfig({
 |------|------|------|--------|
 | `file_path` | Rsdoctor JSON 数据文件路径 | 是 | - |
 | `target_branch` | 用于基线比较的目标分支 | 否 | `main` |
+| `concurrency` | PR 和 workflow_dispatch 比较时并行处理的 Rsdoctor JSON 文件数量 | 否 | `4` |
 
 - `target_branch`: 如果想用动态目标分支，而不仅仅是主分支，则可以使用 `target_branch: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref || github.event.repository.default_branch }}`
 

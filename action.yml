@@ -25,6 +25,11 @@ inputs:
     required: false
     default: 'claude-3-5-haiku-latest'
     type: string
+  concurrency:
+    description: 'Number of Rsdoctor data files to process in parallel for PR and workflow_dispatch comparisons. Set to 1 for sequential processing.'
+    required: false
+    default: '4'
+    type: string
 
 runs:
   using: 'node24'
