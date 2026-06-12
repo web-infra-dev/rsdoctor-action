@@ -100,7 +100,8 @@ function calculateOptionalDiff(current?: number, baseline?: number): string {
 
 function resolveAssetPath(assetPath: string, dataFilePath: string): string | null {
   const relativeDataPath = path.relative(process.cwd(), dataFilePath);
-  const isDownloadedArtifact = relativeDataPath.split(path.sep)[0] === 'temp-artifact';
+  const topLevelDir = relativeDataPath.split(path.sep)[0];
+  const isDownloadedArtifact = topLevelDir === 'temp-artifact' || topLevelDir === 'temp-artifacts';
   const candidates = [
     path.isAbsolute(assetPath) && !isDownloadedArtifact ? assetPath : null,
     isDownloadedArtifact ? null : path.resolve(process.cwd(), assetPath),

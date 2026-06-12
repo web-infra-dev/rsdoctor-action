@@ -2,8 +2,9 @@ import { setFailed, getInput, summary } from '@actions/core';
 import { uploadArtifact, hashPath } from './upload';
 import { downloadArtifactByCommitHash } from './download';
 import { GitHubService } from './github';
-import { loadSizeData, generateSizeReport, parseRsdoctorData, generateBundleAnalysisReport, BundleAnalysis, generateProjectMarkdown, formatBytes, calculateDiff, enrichRsdoctorDataWithGzip } from './report';
-import type { AIAnalysisResult } from './ai-analysis';
+import { loadSizeData, generateSizeReport, parseRsdoctorData, generateBundleAnalysisReport, enrichRsdoctorDataWithGzip } from './report';
+import { buildBundleDiffComment, hasBundleAnalysisChange } from './comment';
+import type { BundleDiffCommentReport } from './comment';
 import path from 'path';
 import * as fs from 'fs';
 import fg from 'fast-glob';
@@ -89,45 +90,51 @@ async function runRsdoctorBundleDiff(options: {
   await executeRsdoctor('bundle-diff', options);
 }
 
-interface ProjectReport {
-  projectName: string;
-  filePath: string;
-  current: BundleAnalysis | null;
-  baseline: BundleAnalysis | null;
-  baselineCommitHash?: string | null;
-  baselinePRs?: Array<{ number: number; title: string; url: string }>;
+interface ProjectReport extends BundleDiffCommentReport {
+  fullPath?: string;
+  baselineDataPath?: string;
   diffHtmlPath?: string;
-  diffHtmlArtifactId?: number;
-  baselineUsedFallback?: boolean;
-  baselineLatestCommitHash?: string;
-  aiAnalysis?: AIAnalysisResult | null;
 }
 
-function hasBundleAnalysisChange(current: BundleAnalysis, baseline: BundleAnalysis | null): boolean {
-  if (!baseline) return true;
-
-  const hasMetricChanged = (currentSize?: number, baselineSize?: number): boolean => {
-    if (typeof currentSize !== 'number' || typeof baselineSize !== 'number') return false;
-    if (baselineSize === 0 || isNaN(baselineSize)) return false;
-    return currentSize - baselineSize !== 0;
-  };
-
-  return (
-    hasMetricChanged(current.totalSize, baseline.totalSize) ||
-    hasMetricChanged(current.totalGzipSize, baseline.totalGzipSize)
-  );
+interface ProcessSingleFileContext {
+  githubService: GitHubService;
+  baselinePRs?: Array<{ number: number; title: string; url: string }>;
+  aiToken?: string;
 }
 
-function formatGzipSize(analysis: BundleAnalysis): string {
-  return typeof analysis.totalGzipSize === 'number' ? formatBytes(analysis.totalGzipSize) : '-';
-}
+function parseConcurrency(value: string | undefined, defaultValue = 4): number {
+  if (!value) return defaultValue;
 
-function calculateGzipDiff(current: BundleAnalysis, baseline?: BundleAnalysis | null): { value: string; emoji: string } {
-  if (typeof current.totalGzipSize !== 'number' || typeof baseline?.totalGzipSize !== 'number') {
-    return { value: '-', emoji: '' };
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 1) {
+    console.warn(`⚠️ Invalid concurrency value "${value}", using ${defaultValue}`);
+    return defaultValue;
   }
 
-  return calculateDiff(current.totalGzipSize, baseline.totalGzipSize);
+  return Math.floor(parsed);
+}
+
+async function runWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  if (items.length === 0) return [];
+
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+  const workerCount = Math.min(concurrency, items.length);
+
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      while (nextIndex < items.length) {
+        const currentIndex = nextIndex++;
+        results[currentIndex] = await worker(items[currentIndex], currentIndex);
+      }
+    }),
+  );
+
+  return results;
 }
 
 export function extractProjectName(filePath: string): string {
@@ -173,22 +180,19 @@ export function extractProjectName(filePath: string): string {
 }
 
 /**
- * Process a single file: upload, download baseline, generate diff
+ * Process a single file: parse current data and download baseline
  */
 async function processSingleFile(
   fullPath: string,
-  currentCommitHash: string,
   targetCommitHash: string | null,
   baselineUsedFallback?: boolean,
   baselineLatestCommitHash?: string,
-  aiToken?: string,
-  aiModel?: string,
+  context?: ProcessSingleFileContext,
 ): Promise<ProjectReport> {
+  const githubService = context?.githubService || new GitHubService();
+  const aiToken = context?.aiToken || '';
   const fileName = path.basename(fullPath);
   const relativePath = path.relative(process.cwd(), fullPath);
-  const pathParts = relativePath.split(path.sep);
-  const fileNameWithoutExt = path.parse(fileName).name;
-  const fileExt = path.parse(fileName).ext;
   const projectName = extractProjectName(fullPath);
   
   console.log(`\n📦 Processing project: ${projectName}`);
@@ -197,6 +201,7 @@ async function processSingleFile(
   const report: ProjectReport = {
     projectName,
     filePath: relativePath,
+    fullPath,
     current: null,
     baseline: null
   };
@@ -215,27 +220,23 @@ async function processSingleFile(
     try {
       console.log(`📥 Attempting to download baseline for ${projectName}...`);
       // Pass filePath to ensure we download the correct artifact by path hash
-      const downloadResult = await downloadArtifactByCommitHash(targetCommitHash, fileName, fullPath);
-      baselineJsonPath = path.join(downloadResult.downloadPath, fileName);
+      const downloadResult = await downloadArtifactByCommitHash(targetCommitHash, fileName, fullPath, githubService);
+      baselineJsonPath = downloadResult.filePath || path.join(downloadResult.downloadPath, fileName);
       
       console.log(`📁 Downloaded baseline file path: ${baselineJsonPath}`);
       const baselineBundleAnalysis = parseRsdoctorData(baselineJsonPath);
       if (baselineBundleAnalysis) {
         report.baseline = baselineBundleAnalysis;
+        report.baselineDataPath = baselineJsonPath;
         report.baselineCommitHash = targetCommitHash;
         report.baselineUsedFallback = baselineUsedFallback;
         report.baselineLatestCommitHash = baselineLatestCommitHash;
         
-        // Try to find associated PRs for the baseline commit
-        try {
-          const githubService = new GitHubService();
-          baselinePRs = await githubService.findPRsByCommit(targetCommitHash);
+        if (context?.baselinePRs) {
+          baselinePRs = context.baselinePRs;
           if (baselinePRs.length > 0) {
             report.baselinePRs = baselinePRs;
-            console.log(`📎 Found ${baselinePRs.length} PR(s) associated with baseline commit ${targetCommitHash}`);
           }
-        } catch (prError) {
-          console.log(`ℹ️  Could not find PRs for baseline commit: ${prError}`);
         }
         
         console.log(`✅ Successfully downloaded and parsed baseline for ${projectName}`);
@@ -247,76 +248,125 @@ async function processSingleFile(
       baselineJsonPath = null;
     }
   }
-  
-  // Generate rsdoctor HTML diff if baseline exists
-  if (report.baseline && baselineJsonPath) {
-    try {
-      const tempOutDir = process.cwd();
-      const targetArtifactName = `${pathParts.join('-')}-${fileNameWithoutExt}-${targetCommitHash}${fileExt}`;
-      console.log(`🔍 Looking for target artifact: ${pathParts.join('-')}-${fileNameWithoutExt}-${targetCommitHash}${fileExt}`);
 
-      const safeProjectName = projectName.replace(/\//g, '-');
-      const diffHtmlPath = path.join(tempOutDir, `rsdoctor-diff-${safeProjectName}.html`);
-
-      try {
-        await runRsdoctorBundleDiff({
-          baseline: baselineJsonPath,
-          current: fullPath,
-          html: true,
-          output: diffHtmlPath,
-        });
-      } catch (e) {
-        console.log(`⚠️ Failed to generate rsdoctor HTML diff: ${e}`);
-      }
-      
-      if (!report.diffHtmlPath) {
-        report.diffHtmlPath = diffHtmlPath;
-      }
-      
-      if (fs.existsSync(report.diffHtmlPath)) {
-        try {
-          const uploadRes = await uploadArtifact(report.diffHtmlPath, currentCommitHash);
-          if (typeof uploadRes.id === 'number') {
-            report.diffHtmlArtifactId = uploadRes.id;
-            console.log(`✅ Uploaded bundle diff HTML for ${projectName}, artifact id: ${uploadRes.id}`);
-          }
-        } catch (e) {
-          console.warn(`⚠️ Failed to upload diff html for ${projectName}: ${e}`);
-        }
-      }
-
-      // Generate JSON diff for AI analysis (requires @rsdoctor/cli >= 1.5.6-canary.0)
-      if (aiToken && hasBundleAnalysisChange(currentBundleAnalysis, report.baseline)) {
-        try {
-          const diffJsonPath = path.join(tempOutDir, `rsdoctor-diff-${safeProjectName}.json`);
-
-          try {
-            await runRsdoctorBundleDiff({
-              baseline: baselineJsonPath,
-              current: fullPath,
-              json: diffJsonPath,
-            });
-          } catch (e) {
-            console.log(`⚠️ Failed to generate rsdoctor JSON diff: ${e}`);
-            return report;
-          }
-
-          const { analyzeWithAI } = await import(
-            /* webpackChunkName: "ai-analysis" */ './ai-analysis'
-          );
-          report.aiAnalysis = await analyzeWithAI(diffJsonPath, aiToken, aiModel);
-        } catch (e) {
-          console.warn(`⚠️ Failed to generate JSON diff for AI analysis: ${e}`);
-        }
-      } else if (aiToken) {
-        console.log(`ℹ️  No bundle changes detected for ${projectName}, skipping AI analysis`);
-      }
-    } catch (e) {
-      console.warn(`⚠️ rsdoctor bundle-diff failed for ${projectName}: ${e}`);
-    }
+  if (aiToken && currentBundleAnalysis && report.baseline && !hasBundleAnalysisChange(currentBundleAnalysis, report.baseline)) {
+    console.log(`ℹ️  No bundle changes detected for ${projectName}, skipping AI analysis`);
   }
 
   return report;
+}
+
+async function generateDiffArtifact(
+  report: ProjectReport,
+  currentCommitHash: string,
+  aiToken: string,
+  aiModel?: string,
+): Promise<void> {
+  if (!report.current || !report.baseline || !report.baselineDataPath || !report.fullPath) {
+    return;
+  }
+
+  const currentBundleAnalysis = report.current;
+  const tempOutDir = process.cwd();
+  const safeProjectName = report.projectName.replace(/\//g, '-');
+  const diffHtmlPath = path.join(tempOutDir, `rsdoctor-diff-${safeProjectName}.html`);
+
+  console.log(`🧾 Generating bundle diff HTML for ${report.projectName}`);
+
+  try {
+    try {
+      await runRsdoctorBundleDiff({
+        baseline: report.baselineDataPath,
+        current: report.fullPath,
+        html: true,
+        output: diffHtmlPath,
+      });
+    } catch (e) {
+      console.log(`⚠️ Failed to generate rsdoctor HTML diff: ${e}`);
+    }
+
+    if (!report.diffHtmlPath) {
+      report.diffHtmlPath = diffHtmlPath;
+    }
+
+    if (fs.existsSync(report.diffHtmlPath)) {
+      try {
+        const uploadRes = await uploadArtifact(report.diffHtmlPath, currentCommitHash);
+        if (typeof uploadRes.id === 'number') {
+          report.diffHtmlArtifactId = uploadRes.id;
+          console.log(`✅ Uploaded bundle diff HTML for ${report.projectName}, artifact id: ${uploadRes.id}`);
+        }
+      } catch (e) {
+        console.warn(`⚠️ Failed to upload diff html for ${report.projectName}: ${e}`);
+      }
+    }
+
+    // Generate JSON diff for AI analysis (requires @rsdoctor/cli >= 1.5.6-canary.0)
+    if (aiToken && hasBundleAnalysisChange(currentBundleAnalysis, report.baseline)) {
+      try {
+        const diffJsonPath = path.join(tempOutDir, `rsdoctor-diff-${safeProjectName}.json`);
+
+        try {
+          await runRsdoctorBundleDiff({
+            baseline: report.baselineDataPath,
+            current: report.fullPath,
+            json: diffJsonPath,
+          });
+        } catch (e) {
+          console.log(`⚠️ Failed to generate rsdoctor JSON diff: ${e}`);
+          return;
+        }
+
+        const { analyzeWithAI } = await import(
+          /* webpackChunkName: "ai-analysis" */ './ai-analysis'
+        );
+        report.aiAnalysis = await analyzeWithAI(diffJsonPath, aiToken, aiModel);
+      } catch (e) {
+        console.warn(`⚠️ Failed to generate JSON diff for AI analysis: ${e}`);
+      }
+    }
+  } catch (e) {
+    console.warn(`⚠️ rsdoctor bundle-diff failed for ${report.projectName}: ${e}`);
+  }
+
+  console.log(`✅ Finished bundle diff artifact step for ${report.projectName}`);
+}
+
+async function generateDiffArtifacts(
+  projectReports: ProjectReport[],
+  currentCommitHash: string,
+  aiToken: string,
+  aiModel?: string,
+): Promise<void> {
+  const reportsWithBaseline = projectReports.filter(report => report.current && report.baseline && report.baselineDataPath);
+  console.log(`🧾 Generating bundle diff artifacts for ${reportsWithBaseline.length}/${projectReports.length} project(s)`);
+
+  for (const report of reportsWithBaseline) {
+    await generateDiffArtifact(report, currentCommitHash, aiToken, aiModel);
+  }
+}
+
+async function publishBundleDiffComment(githubService: GitHubService, projectReports: ProjectReport[]): Promise<void> {
+  const { context } = require('@actions/github');
+  const reportsWithCurrent = projectReports.filter(report => report.current);
+
+  console.log(`💬 Preparing bundle diff PR comment for ${reportsWithCurrent.length}/${projectReports.length} project(s)`);
+  if (projectReports.length === 0) {
+    console.log('ℹ️ No project reports collected, skipping PR comment');
+    return;
+  }
+
+  const commentBody = buildBundleDiffComment(projectReports);
+
+  try {
+    await githubService.updateOrCreateComment(
+      context.payload.pull_request.number,
+      commentBody
+    );
+    console.log('✅ Added/updated bundle diff comment to PR');
+  } catch (commentError) {
+    console.warn(`⚠️ Failed to add/update comment to PR: ${commentError}`);
+  }
 }
 
 (async () => {
@@ -351,10 +401,12 @@ async function processSingleFile(
     if (aiToken) {
       console.log(`🤖 AI analysis enabled (model: ${aiModel})`);
     }
+    const concurrency = parseConcurrency(getInput('concurrency'));
 
     let targetCommitHash: string | null = null;
     let baselineUsedFallback = false;
     let baselineLatestCommitHash: string | undefined = undefined;
+    let baselinePRs: Array<{ number: number; title: string; url: string }> | undefined;
     
     const isPush = isPushEvent();
     const isPR = isPullRequestEvent();
@@ -371,6 +423,15 @@ async function processSingleFile(
         console.log(`✅ Target branch commit hash: ${targetCommitHash}`);
         if (baselineUsedFallback && baselineLatestCommitHash) {
           console.log(`⚠️  Using fallback commit: ${targetCommitHash} (latest: ${baselineLatestCommitHash})`);
+        }
+
+        try {
+          baselinePRs = await githubService.findPRsByCommit(targetCommitHash);
+          if (baselinePRs.length > 0) {
+            console.log(`📎 Found ${baselinePRs.length} PR(s) associated with baseline commit ${targetCommitHash}`);
+          }
+        } catch (prError) {
+          console.log(`ℹ️  Could not find PRs for baseline commit: ${prError}`);
         }
       } catch (error) {
         console.error(`❌ Failed to get target branch commit: ${error}`);
@@ -442,11 +503,25 @@ async function processSingleFile(
       } else {
         console.log('📥 Detected pull request event - processing files');
       }
-      
+
+      console.log(`⚙️ Processing ${matchedFiles.length} file(s) with concurrency: ${Math.min(concurrency, matchedFiles.length)}`);
+      const reports = await runWithConcurrency(matchedFiles, concurrency, (fullPath) => processSingleFile(fullPath, targetCommitHash, baselineUsedFallback, baselineLatestCommitHash, {
+          githubService,
+          baselinePRs,
+          aiToken,
+        }),
+      );
+      projectReports.push(...reports);
+      console.log(`✅ Completed baseline processing for ${projectReports.length} project report(s)`);
+
+      await generateDiffArtifacts(projectReports, currentCommitHash, aiToken, aiModel);
+      console.log(`✅ Completed bundle diff artifact generation for ${projectReports.length} project report(s)`);
+
+      if (isPR) {
+        await publishBundleDiffComment(githubService, projectReports);
+      }
+
       for (const fullPath of matchedFiles) {
-        const report = await processSingleFile(fullPath, currentCommitHash, targetCommitHash, baselineUsedFallback, baselineLatestCommitHash, aiToken, aiModel);
-        projectReports.push(report);
-        
         // For workflow_dispatch, also upload artifacts
         if (isDispatch) {
           enrichRsdoctorDataWithGzip(fullPath);
@@ -460,6 +535,7 @@ async function processSingleFile(
       }
       
       if (projectReports.length > 0) {
+        console.log(`📝 Writing bundle analysis summary for ${projectReports.length} project report(s)`);
         if (projectReports.length === 1) {
           const report = projectReports[0];
           if (report.current) {
@@ -491,129 +567,7 @@ async function processSingleFile(
         }
       }
     }
-    
-    // Generate combined PR comment for all projects
-    if (isPR && projectReports.length > 0) {
-      const { context } = require('@actions/github');
-      
-      let commentBody = '## Rsdoctor Bundle Diff Analysis\n\n';
-      
-      // Add fallback notice if applicable (check first report)
-      const firstReport = projectReports.find(r => r.current);
-      if (firstReport?.baselineUsedFallback && firstReport?.baselineLatestCommitHash) {
-        commentBody += `> ⚠️ **Note:** The latest commit (\`${firstReport.baselineLatestCommitHash}\`) does not have baseline artifacts. Using commit \`${firstReport.baselineCommitHash}\` for baseline comparison instead. If this seems incorrect, please wait a few minutes and try rerunning the workflow.\n\n`;
-      }
-      
-      // Generate summary (always visible)
-      const reportsWithCurrent = projectReports.filter(r => r.current);
-      if (reportsWithCurrent.length > 1) {
-        // Count projects with changes
-        let projectsWithChanges = 0;
-        for (const report of reportsWithCurrent) {
-          if (!report.current) continue;
-          if (hasBundleAnalysisChange(report.current, report.baseline)) {
-            projectsWithChanges++;
-          }
-        }
-        
-        const totalProjects = reportsWithCurrent.length;
-        const projectWord = totalProjects === 1 ? 'project' : 'projects';
-        const changeWord = projectsWithChanges === 1 ? 'project' : 'projects';
-        commentBody += `Found ${totalProjects} ${projectWord} in monorepo, ${projectsWithChanges} ${changeWord} with changes.\n\n`;
-      }
-      
-      // Generate summary table for quick overview
-      if (reportsWithCurrent.length > 0) {
-        // Check if any project has changes (any non-zero change)
-        let hasChanges = false;
-        for (const report of reportsWithCurrent) {
-          if (!report.current) continue;
-          if (hasBundleAnalysisChange(report.current, report.baseline)) {
-            hasChanges = true;
-            break;
-          }
-        }
-        
-        // Use 'open' attribute if there are changes, otherwise keep it collapsed
-        const detailsTag = hasChanges ? '<details open>\n' : '<details>\n';
-        commentBody += `${detailsTag}<summary><b>📊 Quick Summary</b></summary>\n\n`;
-        commentBody += '| Project | Total Size | Gzip Size | Change | Gzip Change |\n';
-        commentBody += '|---------|------------|-----------|--------|-------------|\n';
-        
-        for (const report of reportsWithCurrent) {
-          if (!report.current) continue;
-          const currentSize = report.current.totalSize;
-          const baselineSize = report.baseline?.totalSize || 0;
-          const diff = report.baseline ? calculateDiff(currentSize, baselineSize) : { value: '-', emoji: '' };
-          const sizeStr = formatBytes(currentSize);
-          const gzipDiff = calculateGzipDiff(report.current, report.baseline);
-          commentBody += `| ${report.projectName} | ${sizeStr} | ${formatGzipSize(report.current)} | ${diff.emoji} ${diff.value} | ${gzipDiff.emoji} ${gzipDiff.value} |\n`;
-        }
-        
-        commentBody += '\n</details>\n\n';
-      }
-      
-      // Helper function to check if a report has significant changes
 
-      const hasSignificantChanges = (report: ProjectReport): boolean => {
-        if (!report.current) return false;
-        return hasBundleAnalysisChange(report.current, report.baseline);
-      };
-      
-      // Filter reports with changes
-      const reportsWithChanges = projectReports.filter(report => {
-        if (!report.current) return false;
-        return hasSignificantChanges(report);
-      });
-      
-      // Generate detailed reports only for projects with changes
-      if (reportsWithChanges.length > 0) {
-        // Only add collapse wrapper if there are multiple reports with changes
-          commentBody += '<details>\n<summary><b>📋 Detailed Reports</b> (Click to expand)</summary>\n\n';
-        
-        for (const report of reportsWithChanges) {
-          commentBody += generateProjectMarkdown(report.projectName, report.filePath, report.current!, report.baseline || undefined, report.baselineCommitHash, report.baselinePRs);
-          
-          // Add diff HTML link if available
-          if (report.diffHtmlArtifactId) {
-            const artifactDownloadLink = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}/artifacts/${report.diffHtmlArtifactId}`;
-            commentBody += `\n📦 **Download Diff Report**: [${report.projectName} Bundle Diff](${artifactDownloadLink})\n\n`;
-          }
-        }
-        
-        if (reportsWithChanges.length > 1) {
-          commentBody += '</details>\n\n';
-        }
-      }
-      
-      // Append AI degradation analysis if available (one section per project that has it)
-      const reportsWithAI = projectReports.filter(r => r.aiAnalysis);
-      if (reportsWithAI.length > 0) {
-        commentBody += '<details>\n<summary><b>🤖 AI Degradation Analysis</b> (Click to expand)</summary>\n\n';
-        for (const report of reportsWithAI) {
-          if (!report.aiAnalysis) continue;
-          if (reportsWithAI.length > 1) {
-            commentBody += `#### 📁 ${report.projectName}\n\n`;
-          }
-          commentBody += report.aiAnalysis.analysis + '\n\n';
-          commentBody += `<sub>Analysis by ${report.aiAnalysis.model}</sub>\n\n`;
-        }
-        commentBody += '</details>\n\n';
-      }
-
-      commentBody += '*Generated by [Rsdoctor GitHub Action](https://rsdoctor.rs/guide/start/action)*';
-      
-      try {
-        await githubService.updateOrCreateComment(
-          context.payload.pull_request.number,
-          commentBody
-        );
-        console.log('✅ Added/updated bundle diff comment to PR');
-      } catch (commentError) {
-        console.warn(`⚠️ Failed to add/update comment to PR: ${commentError}`);
-      }
-    }
-    
     if (!isPush && !isPR && !isDispatch) {
       console.log('ℹ️ Skipping artifact operations - this action only runs on push events (to target branch), pull requests, and workflow_dispatch');
       console.log('Current event:', process.env.GITHUB_EVENT_NAME);
