@@ -1,5 +1,5 @@
 name: '@yifancong/bundle-action'
-description: 'A simple demo for checking compressed size differences. Requires the AI_TOKEN secret for AI-assisted analysis.'
+description: 'A simple demo for checking compressed size differences, with optional AI-assisted analysis.'
 branding:
   icon: 'archive'
   color: 'purple'
@@ -20,6 +20,10 @@ inputs:
     required: false
     default: ''
     type: string
+  enable_ai_analysis:
+    description: 'Enable AI-assisted degradation analysis. Requires AI_TOKEN in the action environment.'
+    required: false
+    default: 'false'
   ai_model:
     description: 'AI model to use for degradation analysis (e.g. claude-3-5-haiku-latest, gpt-4o-mini). Provider is auto-detected from the model name prefix. Set AI_TOKEN as a GitHub Actions secret and pass it to the action step for AI-assisted analysis.'
     required: false
