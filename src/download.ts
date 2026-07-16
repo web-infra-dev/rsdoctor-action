@@ -4,6 +4,89 @@ import { GitHubService } from './github';
 import * as yauzl from 'yauzl';
 import { createArtifactName, hashPath } from './upload';
 
+const ARTIFACT_EXTRACT_TIMEOUT_MS = 30_000;
+
+type OpenZipFromBuffer = (
+  buffer: Buffer,
+  options: yauzl.Options,
+  callback: (error: Error | null, zipfile: yauzl.ZipFile) => void,
+) => void;
+
+function isTargetEntry(entryName: string, fileName: string): boolean {
+  return entryName === fileName || entryName.endsWith(`/${fileName}`);
+}
+
+export function readArtifactFileFromZip(
+  zipBuffer: Buffer,
+  fileName: string,
+  timeoutMs = ARTIFACT_EXTRACT_TIMEOUT_MS,
+  openZip: OpenZipFromBuffer = yauzl.fromBuffer,
+): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let zipfile: yauzl.ZipFile | undefined;
+
+    const finish = (error?: Error, content?: Buffer) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+
+      if (zipfile?.isOpen) {
+        zipfile.close();
+      }
+
+      if (error) {
+        reject(error);
+      } else if (content) {
+        resolve(content);
+      } else {
+        reject(new Error(`Target file ${fileName} could not be read from artifact`));
+      }
+    };
+
+    // Keep the event loop alive and fail explicitly if the ZIP callback chain stalls.
+    const timeout = setTimeout(() => {
+      finish(new Error(`Timed out after ${timeoutMs}ms while extracting ${fileName}`));
+    }, timeoutMs);
+
+    openZip(zipBuffer, { lazyEntries: true }, (openError, openedZipfile) => {
+      if (openError) {
+        finish(openError);
+        return;
+      }
+
+      zipfile = openedZipfile;
+      zipfile.once('error', finish);
+      zipfile.once('end', () => {
+        finish(new Error(`Target file ${fileName} not found in artifact`));
+      });
+      zipfile.on('entry', (entry) => {
+        if (!isTargetEntry(entry.fileName, fileName)) {
+          zipfile?.readEntry();
+          return;
+        }
+
+        zipfile?.openReadStream(entry, (streamError, readStream) => {
+          if (streamError) {
+            finish(streamError);
+            return;
+          }
+
+          const chunks: Buffer[] = [];
+          readStream.once('error', finish);
+          readStream.on('data', (chunk: Buffer | string) => {
+            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+          });
+          readStream.once('end', () => {
+            finish(undefined, Buffer.concat(chunks));
+          });
+        });
+      });
+      zipfile.readEntry();
+    });
+  });
+}
+
 export async function downloadArtifact(artifactId: number, fileName: string) {
   console.log(`📥 Downloading artifact ID: ${artifactId}`);
   
@@ -11,74 +94,25 @@ export async function downloadArtifact(artifactId: number, fileName: string) {
   
   try {
     const downloadResponse = await githubService.downloadArtifact(artifactId);
-    
-    const tempDir = path.join(process.cwd(), 'temp-artifact');
-    await fs.promises.mkdir(tempDir, { recursive: true });
-    
-    const zipPath = path.join(tempDir, 'artifact.zip');
-    const buffer = Buffer.from(downloadResponse);
-    await fs.promises.writeFile(zipPath, buffer);
-    
-    console.log(`✅ Downloaded artifact zip to: ${zipPath}`);
-    
-    await new Promise<void>((resolve, reject) => {
-      yauzl.open(zipPath, { lazyEntries: true }, (err, zipfile) => {
-        if (err) return reject(err);
-        
-        zipfile.readEntry();
-        zipfile.on('entry', (entry) => {
-          if (/\/$/.test(entry.fileName)) {
-            zipfile.readEntry();
-          } else {
-            zipfile.openReadStream(entry, (err, readStream) => {
-              if (err) return reject(err);
-              
-              const outputPath = path.join(tempDir, entry.fileName);
-              const outputDir = path.dirname(outputPath);
-              
-              fs.promises.mkdir(outputDir, { recursive: true }).then(() => {
-                const writeStream = fs.createWriteStream(outputPath);
-                readStream.pipe(writeStream);
-                writeStream.on('close', () => zipfile.readEntry());
-              });
-            });
-          }
-        });
-        
-        zipfile.on('end', () => resolve());
-        zipfile.on('error', reject);
-      });
-    });
-    
-    console.log(`✅ Extracted artifact to: ${tempDir}`);
-    
-    const extractedFiles = await fs.promises.readdir(tempDir, { recursive: true });
-    console.log(`📁 Extracted files: ${extractedFiles.join(', ')}`);
-    
-    let targetFilePath: string | null = null;
-    for (const file of extractedFiles) {
-      if (file === fileName || file.endsWith(fileName)) {
-        targetFilePath = path.join(tempDir, file);
-        break;
-      }
-    }
-    
-    if (!targetFilePath) {
-      throw new Error(`Target file ${fileName} not found in extracted artifact`);
-    }
-    
-    console.log(`📄 Found target file: ${targetFilePath}`);
-    
-    const fileContent = await fs.promises.readFile(targetFilePath, 'utf-8');
+
+    const zipBuffer = Buffer.from(downloadResponse);
+    console.log(`✅ Downloaded artifact ZIP (${zipBuffer.length} bytes)`);
+
+    const fileBuffer = await readArtifactFileFromZip(zipBuffer, fileName);
+    const fileContent = fileBuffer.toString('utf-8');
     const jsonData = JSON.parse(fileContent);
-    
-    console.log('--- Downloaded Artifact JSON Data ---');
-    
-    await fs.promises.unlink(zipPath);
+
+    const tempDir = path.join(process.cwd(), 'temp-artifact', String(artifactId));
+    await fs.promises.rm(tempDir, { recursive: true, force: true });
+    await fs.promises.mkdir(tempDir, { recursive: true });
+    const targetFilePath = path.join(tempDir, fileName);
+    await fs.promises.writeFile(targetFilePath, fileBuffer);
+
+    console.log(`✅ Extracted target file to: ${targetFilePath}`);
     
     return {
       downloadPath: tempDir,
-      jsonData: jsonData
+      jsonData
     };
     
   } catch (error) {
