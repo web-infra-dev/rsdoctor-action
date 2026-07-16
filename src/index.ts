@@ -4,6 +4,7 @@ import { downloadArtifactByCommitHash } from './download';
 import { GitHubService } from './github';
 import { loadSizeData, generateSizeReport, parseRsdoctorData, generateBundleAnalysisReport, BundleAnalysis, generateProjectMarkdown, formatBytes, calculateDiff, enrichRsdoctorDataWithGzip } from './report';
 import type { AIAnalysisResult } from './ai-analysis';
+import { isAIAnalysisEnabled } from './ai-config';
 import path from 'path';
 import * as fs from 'fs';
 import fg from 'fast-glob';
@@ -346,10 +347,15 @@ async function processSingleFile(
     const currentCommitHash = githubService.getCurrentCommitHash();
     console.log(`Current commit hash: ${currentCommitHash}`);
 
-    const aiToken = process.env.AI_TOKEN || '';
+    const aiEnabled = isAIAnalysisEnabled(getInput('enable_ai_analysis'));
+    const aiToken = aiEnabled ? process.env.AI_TOKEN || '' : '';
     const aiModel = getInput('ai_model') || 'claude-3-5-haiku-latest';
-    if (aiToken) {
+    if (!aiEnabled) {
+      console.log('ℹ️  AI analysis disabled');
+    } else if (aiToken) {
       console.log(`🤖 AI analysis enabled (model: ${aiModel})`);
+    } else {
+      console.warn('⚠️  AI analysis enabled, but AI_TOKEN is not configured');
     }
 
     let targetCommitHash: string | null = null;

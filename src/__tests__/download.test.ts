@@ -1,9 +1,14 @@
 import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it } from '@rstest/core';
-import { downloadArtifactByCommitHash } from '../download';
+import { downloadArtifactByCommitHash, readArtifactFileFromZip } from '../download';
 import { createArtifactName, hashPath } from '../upload';
 import { mockConsole, restoreConsole } from './mock-console';
 const nock = require('nock');
+
+const artifactZip = Buffer.from(
+  'UEsDBBQAAAAIAMV58FyYwF+WKQAAADEAAAAZAAAAbmVzdGVkL3JzZG9jdG9yLWRhdGEuanNvbqtWSkksSVSyqlZKzijNy3YvSizIAPESi4tTS4qVrKJjdSAyYHZtbS0AUEsBAhQDFAAAAAgAxXnwXJjAX5YpAAAAMQAAABkAAAAAAAAAAAAAAIABAAAAAG5lc3RlZC9yc2RvY3Rvci1kYXRhLmpzb25QSwUGAAAAAAEAAQBHAAAAYAAAAAAA',
+  'base64',
+);
 
 describe('Download Module', () => {
   const commitHash = 'abc1234567';
@@ -59,6 +64,31 @@ describe('Download Module', () => {
       .get(`/repos/web-infra-dev/rsdoctor-action/actions/artifacts/${artifactId}/zip`)
       .reply(200, Buffer.from('not a zip'));
   }
+
+  it('should read the target JSON directly from a nested ZIP entry', async () => {
+    const content = await readArtifactFileFromZip(artifactZip, fileName);
+
+    expect(JSON.parse(content.toString('utf-8'))).toEqual({
+      data: {
+        chunkGraph: {
+          assets: [],
+          chunks: [],
+        },
+      },
+    });
+  });
+
+  it('should reject when the target entry does not exist', async () => {
+    await expect(readArtifactFileFromZip(artifactZip, 'missing.json')).rejects.toThrow(
+      'Target file missing.json not found in artifact',
+    );
+  });
+
+  it('should reject instead of exiting silently when ZIP opening stalls', async () => {
+    await expect(
+      readArtifactFileFromZip(Buffer.alloc(0), fileName, 10, () => undefined),
+    ).rejects.toThrow(`Timed out after 10ms while extracting ${fileName}`);
+  });
 
   it('should find artifacts that use the rsdoctor-prefixed name', async () => {
     const pathHash = getPathHash();
