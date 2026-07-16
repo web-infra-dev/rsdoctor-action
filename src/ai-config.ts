@@ -1,3 +1,3 @@
 export function isAIAnalysisEnabled(value: string): boolean {
-  return value.trim().toLowerCase() === 'true';
+  return value.trim().toLowerCase() !== 'false';
 }

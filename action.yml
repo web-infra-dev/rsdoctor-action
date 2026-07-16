@@ -21,9 +21,9 @@ inputs:
     default: ''
     type: string
   enable_ai_analysis:
-    description: 'Enable AI-assisted degradation analysis. Requires AI_TOKEN in the action environment.'
+    description: 'Enable AI-assisted degradation analysis. Set to false to disable it.'
     required: false
-    default: 'false'
+    default: 'true'
   ai_model:
     description: 'AI model to use for degradation analysis (e.g. claude-3-5-haiku-latest, gpt-4o-mini). Provider is auto-detected from the model name prefix. Set AI_TOKEN as a GitHub Actions secret and pass it to the action step for AI-assisted analysis.'
     required: false

@@ -62,10 +62,10 @@ export default defineConfig({
 |-----------|-------------|----------|---------|
 | `file_path` | Path to Rsdoctor JSON data file | Yes | - |
 | `target_branch` | Target branch for baseline comparison | No | `main` |
-| `enable_ai_analysis` | Enable AI-assisted degradation analysis | No | `false` |
+| `enable_ai_analysis` | Enable AI-assisted degradation analysis | No | `true` |
 | `ai_model` | Model used when AI analysis is enabled | No | `claude-3-5-haiku-latest` |
 
-> AI-assisted analysis is disabled by default. To enable it, set `enable_ai_analysis: true` and pass `AI_TOKEN` through the action step environment.
+> AI-assisted analysis is enabled by default when `AI_TOKEN` is provided. Set `enable_ai_analysis: false` to disable it explicitly.
 
 - `target_branch`: If you want to use a dynamic target branch (e.g., the PR base branch instead of a fixed main), use:
   `target_branch: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref || github.event.repository.default_branch }}`
@@ -146,7 +146,6 @@ jobs:
         with:
           file_path: 'dist/.rsdoctor/rsdoctor-data.json'
           target_branch: 'main'
-          enable_ai_analysis: true
 ```
 
 ## Report Examples
