@@ -259,8 +259,8 @@ export class GitHubService {
       console.log(`⚠️  Commit ${latestShortHash} does not have baseline artifacts`);
       console.log(`🔍 Looking for previous commits with baseline artifacts...`);
       
-      let currentCommit = latestCommitHash as string;
-      let checkedCommits: string[] = [currentCommit];
+      let currentCommit = latestCommitHash;
+      const checkedCommits: string[] = [currentCommit];
       const maxDepth = 5;
       
       for (let depth = 0; depth < maxDepth; depth++) {
@@ -344,6 +344,7 @@ export class GitHubService {
       const runsResponse = await this.octokit.rest.actions.listWorkflowRunsForRepo({
         owner,
         repo,
+        branch,
         head_sha: commitHash,
         status,
         per_page: 10
@@ -395,6 +396,7 @@ export class GitHubService {
       const runsResponse = await this.octokit.rest.actions.listWorkflowRunsForRepo({
         owner,
         repo,
+        branch,
         head_sha: commitHash,
         status,
         per_page: 30  // Increase to get more runs

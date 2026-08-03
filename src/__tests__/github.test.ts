@@ -42,7 +42,7 @@ describe('GitHub Service', () => {
       // Mock workflow runs check (no artifacts found)
       nock('https://api.github.com')
         .get('/repos/web-infra-dev/rsdoctor-action/actions/runs')
-        .query({ head_sha: mockCommitSha, status: 'completed', per_page: 30 })
+        .query({ branch: 'main', head_sha: mockCommitSha, status: 'completed', per_page: 30 })
         .reply(200, {
           workflow_runs: [],
         });
@@ -84,7 +84,7 @@ describe('GitHub Service', () => {
       // Mock workflow runs check for latest commit (no artifacts)
       nock('https://api.github.com')
         .get('/repos/web-infra-dev/rsdoctor-action/actions/runs')
-        .query({ head_sha: mockCommitSha, status: 'completed', per_page: 30 })
+        .query({ branch: 'main', head_sha: mockCommitSha, status: 'completed', per_page: 30 })
         .reply(200, {
           workflow_runs: [],
         });
@@ -110,12 +110,13 @@ describe('GitHub Service', () => {
       // Mock workflow runs check for parent commit (has artifacts)
       nock('https://api.github.com')
         .get('/repos/web-infra-dev/rsdoctor-action/actions/runs')
-        .query({ head_sha: mockParentSha, status: 'completed', per_page: 30 })
+        .query({ branch: 'main', head_sha: mockParentSha, status: 'completed', per_page: 30 })
         .reply(200, {
           workflow_runs: [
             {
               id: 123,
               name: 'CI',
+              head_sha: mockParentSha,
               status: 'completed',
               conclusion: 'success',
             },
@@ -152,12 +153,13 @@ describe('GitHub Service', () => {
 
       nock('https://api.github.com')
         .get('/repos/web-infra-dev/rsdoctor-action/actions/runs')
-        .query({ head_sha: mockCommitSha, status: 'completed', per_page: 30 })
+        .query({ branch: 'main', head_sha: mockCommitSha, status: 'completed', per_page: 30 })
         .reply(200, {
           workflow_runs: [
             {
               id: 456,
               name: 'CI',
+              head_sha: mockCommitSha,
               status: 'completed',
               conclusion: 'success',
             },
@@ -178,13 +180,35 @@ describe('GitHub Service', () => {
     });
   });
 
+  describe('findWorkflowRunByCommit', () => {
+    it('should filter the exact workflow run lookup by branch', async () => {
+      const fullSha = 'abcdef1234abcdef1234abcdef1234abcdef1234';
+
+      nock('https://api.github.com')
+        .get('/repos/web-infra-dev/rsdoctor-action/actions/runs')
+        .query({ branch: 'main', head_sha: fullSha, status: 'completed', per_page: 10 })
+        .reply(200, {
+          workflow_runs: [
+            {
+              id: 456,
+              head_sha: fullSha,
+              conclusion: 'success',
+            },
+          ],
+        });
+
+      const run = await githubService.findWorkflowRunByCommit(fullSha, 'completed', 'main');
+      expect(run.id).toBe(456);
+    });
+  });
+
   describe('findAllWorkflowRunsByCommit', () => {
     it('should filter fallback workflow run lookup by branch', async () => {
       const fullSha = 'abcdef1234abcdef1234abcdef1234abcdef1234';
 
       nock('https://api.github.com')
         .get('/repos/web-infra-dev/rsdoctor-action/actions/runs')
-        .query({ head_sha: fullSha, status: 'completed', per_page: 30 })
+        .query({ branch: 'main', head_sha: fullSha, status: 'completed', per_page: 30 })
         .reply(200, {
           workflow_runs: [],
         });
