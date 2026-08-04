@@ -50,7 +50,7 @@ export default defineConfig({
     # Rsdoctor JSON 数据文件路径（相对于项目根目录）
     file_path: 'dist/.rsdoctor/rsdoctor-data.json'
     
-    # 用于比较的目标分支（默认为 main）, 如果想用动态目标分支，而不仅仅是主分支，则可以使用 `target_branch: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref || github.event.repository.default_branch }}`
+    # 用于比较的目标分支（默认为仓库的默认分支），如果想使用动态目标分支，可以使用 `target_branch: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref || github.event.repository.default_branch }}`
     target_branch: 'main' 
 ```
 
@@ -59,7 +59,7 @@ export default defineConfig({
 | 参数 | 描述 | 必需 | 默认值 |
 |------|------|------|--------|
 | `file_path` | Rsdoctor JSON 数据文件路径 | 是 | - |
-| `target_branch` | 用于基线比较的目标分支 | 否 | `main` |
+| `target_branch` | 用于基线比较的目标分支 | 否 | 仓库默认分支 |
 
 - `target_branch`: 如果想用动态目标分支，而不仅仅是主分支，则可以使用 `target_branch: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref || github.event.repository.default_branch }}`
 

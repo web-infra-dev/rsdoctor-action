@@ -1,4 +1,5 @@
 import { describe, beforeEach, afterAll, it, expect } from '@rstest/core';
+import { getInput } from '@actions/core';
 import { GitHubService } from '../github';
 const nock = require('nock');
 
@@ -22,9 +23,22 @@ describe('GitHub Service', () => {
   });
 
   describe('getTargetBranch', () => {
-    it('should return default branch when not specified', () => {
-      const branch = githubService.getTargetBranch();
+    it('should return the configured target branch', async () => {
+      const branch = await githubService.getTargetBranch();
       expect(branch).toBe('main');
+    });
+
+    it('should use the repository default branch when not configured', async () => {
+      (getInput as any)
+        .mockReturnValueOnce('')
+        .mockReturnValueOnce('');
+
+      nock('https://api.github.com')
+        .get('/repos/web-infra-dev/rsdoctor-action')
+        .reply(200, { default_branch: 'master' });
+
+      const branch = await githubService.getTargetBranch();
+      expect(branch).toBe('master');
     });
   });
 
@@ -139,6 +153,16 @@ describe('GitHub Service', () => {
       expect(result.commitHash).toBe(mockParentSha);
       expect(result.usedFallbackCommit).toBe(true);
       expect(result.latestCommitHash).toBe(mockCommitSha);
+    });
+
+    it('should fail when the target branch cannot be queried', async () => {
+      nock('https://api.github.com')
+        .get('/repos/web-infra-dev/rsdoctor-action/branches/main')
+        .reply(404, { message: 'Branch not found' });
+
+      await expect(githubService.getTargetBranchLatestCommit())
+        .rejects
+        .toThrow('Failed to get target branch (main) commit: Branch not found');
     });
 
     it('should use the full SHA when querying workflow runs for baseline artifacts', async () => {

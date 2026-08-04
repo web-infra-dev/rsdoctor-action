@@ -14,11 +14,6 @@ export interface WorkflowRunParams {
   skipCommits?: number;
 }
 
-interface WorkflowRun {
-  conclusion: string;
-  head_sha: string;
-}
-
 interface Artifact {
   id: number;
   name: string;
@@ -62,10 +57,25 @@ export class GitHubService {
     return execSync('git rev-parse --short=10 HEAD', { encoding: 'utf8' }).trim();
   }
 
-  getTargetBranch(): string {
+  async getTargetBranch(): Promise<string> {
     const dispatchTargetBranch = getInput('dispatch_target_branch');
-    const targetBranch = getInput('target_branch') || 'main';
-    return dispatchTargetBranch || targetBranch;
+    const configuredTargetBranch = dispatchTargetBranch || getInput('target_branch');
+    if (configuredTargetBranch) {
+      return configuredTargetBranch;
+    }
+
+    const { owner, repo } = this.repository;
+    try {
+      const repositoryResponse = await this.octokit.rest.repos.get({ owner, repo });
+      const defaultBranch = repositoryResponse.data?.default_branch;
+      if (!defaultBranch) {
+        throw new Error('Repository default branch is unavailable');
+      }
+      return defaultBranch;
+    } catch (error) {
+      const apiError = error as ApiError;
+      throw new Error(`Failed to get repository default branch: ${apiError.message}`);
+    }
   }
 
   async listWorkflowRuns(params: WorkflowRunParams) {
@@ -134,112 +144,23 @@ export class GitHubService {
   }
 
   async getTargetBranchLatestCommit(): Promise<{ commitHash: string; usedFallbackCommit: boolean; latestCommitHash?: string }> {
-    const targetBranch = this.getTargetBranch();
+    const targetBranch = await this.getTargetBranch();
     console.log(`🔍 Attempting to get latest commit for target branch: ${targetBranch}`);
     console.log(`📋 Repository: ${this.repository.owner}/${this.repository.repo}`);
-    
-    let latestCommitHash: string | null = null;
     
     try {
       console.log(`📡 Trying to get latest commit from GitHub API...`);
       const { owner, repo } = this.repository;
-      
-      try {
-        const branchResponse = await this.octokit.rest.repos.getBranch({
-          owner,
-          repo,
-          branch: targetBranch
-        });
-        
-        if (branchResponse.data && branchResponse.data.commit) {
-          latestCommitHash = branchResponse.data.commit.sha;
-          console.log(`✅ Found commit hash from GitHub API: ${formatShortSha(latestCommitHash)}`);
-        }
-      } catch (error) {
-        const apiError = error as ApiError;
-        console.warn(`⚠️  GitHub API failed: ${apiError.message}`);
-        
-        const alternativeBranches = ['master', 'main', 'develop'];
-        for (const altBranch of alternativeBranches) {
-          if (altBranch !== targetBranch) {
-            try {
-              console.log(`🔄 Trying alternative branch: ${altBranch}`);
-              const altResponse = await this.octokit.rest.repos.getBranch({
-                owner,
-                repo,
-                branch: altBranch
-              });
-              
-              if (altResponse.data && altResponse.data.commit) {
-                latestCommitHash = altResponse.data.commit.sha;
-                console.log(`✅ Found commit hash from alternative branch ${altBranch}: ${formatShortSha(latestCommitHash)}`);
-                break;
-              }
-            } catch (error) {
-              const altError = error as ApiError;
-              console.log(`❌ Alternative branch ${altBranch} also failed: ${altError.message}`);
-            }
-          }
-        }
-      }
-
+      const branchResponse = await this.octokit.rest.repos.getBranch({
+        owner,
+        repo,
+        branch: targetBranch
+      });
+      const latestCommitHash = branchResponse.data?.commit?.sha;
       if (!latestCommitHash) {
-        console.log(`📋 Trying to get from workflow runs...`);
-        try {
-          const runs = await this.listWorkflowRuns({
-            branch: targetBranch,
-            status: 'completed',
-            limit: 10
-          });
-
-          if (runs.workflow_runs && runs.workflow_runs.length > 0) {
-            console.log(`Found ${runs.workflow_runs.length} workflow runs for ${targetBranch}`);
-            
-            const successfulRun = runs.workflow_runs.find((run: WorkflowRun) => run.conclusion === 'success');
-            if (successfulRun) {
-              latestCommitHash = successfulRun.head_sha;
-              console.log(`✅ Found successful workflow run for ${targetBranch}: ${formatShortSha(latestCommitHash)}`);
-            } else {
-              const latestRun = runs.workflow_runs[0] as WorkflowRun;
-              latestCommitHash = latestRun.head_sha;
-              console.log(`⚠️  No successful runs found, using latest workflow run for ${targetBranch}: ${formatShortSha(latestCommitHash)}`);
-            }
-          }
-        } catch (error) {
-          const workflowError = error as ApiError;
-          console.warn(`⚠️  Failed to get workflow runs: ${workflowError.message}`);
-        }
+        throw new Error(`Target branch (${targetBranch}) has no commit hash`);
       }
-
-      if (!latestCommitHash) {
-        console.log(`🔧 No workflow runs found for ${targetBranch}, trying to fetch from remote...`);
-        try {
-          console.log(`📥 Running: git fetch origin`);
-          execSync('git fetch origin', { encoding: 'utf8' });
-          
-          console.log(`📥 Running: git rev-parse origin/${targetBranch}`);
-          latestCommitHash = execSync(`git rev-parse origin/${targetBranch}`, { encoding: 'utf8' }).trim();
-          console.log(`✅ Found commit hash from git: ${formatShortSha(latestCommitHash)}`);
-        } catch (gitError) {
-          console.warn(`❌ Git fetch failed: ${gitError}`);
-          
-          try {
-            console.log(`📥 Trying alternative: git ls-remote origin ${targetBranch}`);
-            const remoteRef = execSync(`git ls-remote origin ${targetBranch}`, { encoding: 'utf8' }).trim();
-            if (remoteRef) {
-              latestCommitHash = remoteRef.split('\t')[0];
-              console.log(`✅ Found commit hash from git ls-remote: ${formatShortSha(latestCommitHash)}`);
-            }
-          } catch (altError) {
-            console.warn(`❌ Alternative git command failed: ${altError}`);
-          }
-        }
-      }
-
-      if (!latestCommitHash) {
-        console.error(`❌ All methods to get target branch commit have failed`);
-        throw new Error(`Unable to get target branch (${targetBranch}) commit hash. Please ensure the branch exists and you have correct permissions.`);
-      }
+      console.log(`✅ Found commit hash from GitHub API: ${formatShortSha(latestCommitHash)}`);
 
       const latestShortHash = formatShortSha(latestCommitHash);
 

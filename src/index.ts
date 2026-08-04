@@ -40,16 +40,16 @@ function isPullRequestEvent(): boolean {
   return isPR;
 }
 
-function isPushEvent(): boolean {
+async function isPushEvent(githubService: GitHubService): Promise<boolean> {
   const { context } = require('@actions/github');
   const isPush = context.eventName === 'push';
   
   if (isPush) {
     const ref = context.ref;
-    const targetBranch = getInput('target_branch') || 'main';
+    const targetBranch = await githubService.getTargetBranch();
     const targetBranchRef = `refs/heads/${targetBranch}`;
     
-    // Check if this push is to the target branch (main/master)
+    // Check if this push is to the resolved target branch
     if (ref === targetBranchRef) {
       console.log(`🔄 Detected push event to ${targetBranch} branch`);
       console.log(`   This may be a merge commit - will upload artifacts`);
@@ -362,7 +362,7 @@ async function processSingleFile(
     let baselineUsedFallback = false;
     let baselineLatestCommitHash: string | undefined = undefined;
     
-    const isPush = isPushEvent();
+    const isPush = await isPushEvent(githubService);
     const isPR = isPullRequestEvent();
     const isDispatch = isWorkflowDispatchEvent();
     
@@ -380,7 +380,7 @@ async function processSingleFile(
         }
       } catch (error) {
         console.error(`❌ Failed to get target branch commit: ${error}`);
-        console.log('📝 No baseline data available for comparison');
+        throw error;
       }
     }
     

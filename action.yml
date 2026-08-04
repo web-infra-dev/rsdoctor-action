@@ -12,9 +12,8 @@ inputs:
     description: 'Path to the file to upload (relative to project root)'
     required: true
   target_branch:
-    description: 'The target branch to compare against (defaults to main)'
+    description: 'The target branch to compare against (defaults to the repository default branch)'
     required: false
-    default: 'main'
   dispatch_target_branch:
     description: 'Override target branch when triggered by workflow_dispatch'
     required: false
