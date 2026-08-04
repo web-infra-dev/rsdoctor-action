@@ -380,7 +380,7 @@ async function processSingleFile(
         }
       } catch (error) {
         console.error(`❌ Failed to get target branch commit: ${error}`);
-        throw error;
+        console.log('📝 No baseline data available for comparison');
       }
     }
     

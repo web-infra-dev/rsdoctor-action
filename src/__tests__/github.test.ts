@@ -40,6 +40,19 @@ describe('GitHub Service', () => {
       const branch = await githubService.getTargetBranch();
       expect(branch).toBe('master');
     });
+
+    it('should fall back to main when the repository query fails', async () => {
+      (getInput as any)
+        .mockReturnValueOnce('')
+        .mockReturnValueOnce('');
+
+      nock('https://api.github.com')
+        .get('/repos/web-infra-dev/rsdoctor-action')
+        .reply(403, { message: 'Resource not accessible by integration' });
+
+      const branch = await githubService.getTargetBranch();
+      expect(branch).toBe('main');
+    });
   });
 
   describe('getTargetBranchLatestCommit', () => {

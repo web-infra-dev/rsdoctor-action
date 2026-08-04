@@ -74,7 +74,10 @@ export class GitHubService {
       return defaultBranch;
     } catch (error) {
       const apiError = error as ApiError;
-      throw new Error(`Failed to get repository default branch: ${apiError.message}`);
+      console.warn(
+        `⚠️  Failed to get repository default branch: ${apiError.message}. Falling back to main.`,
+      );
+      return 'main';
     }
   }
 
