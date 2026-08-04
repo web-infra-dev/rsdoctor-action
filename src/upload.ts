@@ -14,13 +14,23 @@ export function createArtifactName(pathHash: string, commitHash: string): string
   return `${ARTIFACT_NAME_PREFIX}-${pathHash}-${commitHash}`;
 }
 
+/**
+ * Artifact names historically use a 10-character SHA. Keep that stable while
+ * allowing callers to use the full SHA required by GitHub API filters.
+ */
+export function formatArtifactCommitHash(commitHash: string): string {
+  return /^[0-9a-f]{40}$/i.test(commitHash) ? commitHash.substring(0, 10) : commitHash;
+}
+
 export async function uploadArtifact(filePath: string, commitHash?: string) {
   const { DefaultArtifactClient } = await import(
     /* webpackChunkName: "actions-artifact" */ '@actions/artifact'
   );
   const artifactClient = new DefaultArtifactClient();
 
-  const hash = commitHash || execSync('git rev-parse --short=10 HEAD', { encoding: 'utf8' }).trim();
+  const hash = formatArtifactCommitHash(
+    commitHash || execSync('git rev-parse --short=10 HEAD', { encoding: 'utf8' }).trim(),
+  );
 
   const targetFilePath = filePath;
 

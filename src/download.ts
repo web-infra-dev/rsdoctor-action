@@ -2,7 +2,7 @@ import path from 'path';
 import * as fs from 'fs';
 import { GitHubService } from './github';
 import * as yauzl from 'yauzl';
-import { createArtifactName, hashPath } from './upload';
+import { createArtifactName, formatArtifactCommitHash, hashPath } from './upload';
 
 const ARTIFACT_EXTRACT_TIMEOUT_MS = 30_000;
 
@@ -140,12 +140,18 @@ export async function downloadArtifactByCommitHash(
   const fileNameWithoutExt = path.parse(fileName).name;
   const fileExt = path.parse(fileName).ext;
   const pathHash = hashPath(pathParts, fileNameWithoutExt);
-  const expectedArtifactName = createArtifactName(pathHash, commitHash);
-  // Legacy formats were used before artifact names were prefixed for cleanup.
-  const legacyArtifactNames = [
+  const artifactCommitHash = formatArtifactCommitHash(commitHash);
+  const expectedArtifactName = createArtifactName(pathHash, artifactCommitHash);
+  // Keep the historical short-SHA format as the primary name, while accepting
+  // full-SHA and pre-prefix names created by earlier or transitional versions.
+  const compatibleArtifactNames = new Set([
+    expectedArtifactName,
+    createArtifactName(pathHash, commitHash),
+    `${pathHash}-${artifactCommitHash}`,
+    `${pathHash}-${artifactCommitHash}${fileExt}`,
     `${pathHash}-${commitHash}`,
     `${pathHash}-${commitHash}${fileExt}`,
-  ];
+  ]);
 
   console.log(`📋 Searching for artifact with path hash and commit hash: ${expectedArtifactName}`);
   console.log(`   Path hash: ${pathHash}`);
@@ -169,7 +175,7 @@ export async function downloadArtifactByCommitHash(
       try {
         const runArtifacts = await githubService.listArtifactsForWorkflowRun(workflowRun.id);
         const foundArtifact = runArtifacts.artifacts?.find(
-          (a: any) => a.name === expectedArtifactName || legacyArtifactNames.includes(a.name),
+          (a: any) => compatibleArtifactNames.has(a.name),
         );
         
         if (foundArtifact) {
@@ -200,7 +206,7 @@ export async function downloadArtifactByCommitHash(
   if (!artifact) {
     artifacts = await githubService.listArtifacts();
     artifact = artifacts.artifacts.find(
-      (a: any) => a.name === expectedArtifactName || legacyArtifactNames.includes(a.name),
+      (a: any) => compatibleArtifactNames.has(a.name),
     );
   }
   

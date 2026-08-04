@@ -60,6 +60,18 @@ describe('Upload Module', () => {
     expect(result.id).toBe(1);
   });
 
+  it('should keep the historical short SHA when given a full commit SHA', async () => {
+    const fullCommitHash = 'abc1234567abc1234567abc1234567abc1234567';
+    const result = await uploadArtifact(mockFilePath, fullCommitHash);
+    const relativePath = path.relative(process.cwd(), mockFilePath);
+    const pathParts = relativePath.split(path.sep);
+    const pathHash = hashPath(pathParts, 'rsdoctor-data');
+
+    expect(console.log).toHaveBeenCalledWith(`Uploading artifact: rsdoctor-${pathHash}-${mockCommitHash}`);
+    expect(result).toBeDefined();
+    expect(result.id).toBe(1);
+  });
+
   describe('hashPath', () => {
     it('should generate consistent hash for same path', () => {
       const pathParts1 = ['packages', 'app1', 'dist', '.rsdoctor'];

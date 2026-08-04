@@ -14,11 +14,6 @@ export interface WorkflowRunParams {
   skipCommits?: number;
 }
 
-interface WorkflowRun {
-  conclusion: string;
-  head_sha: string;
-}
-
 interface Artifact {
   id: number;
   name: string;
@@ -36,6 +31,10 @@ interface ApiError extends Error {
       message?: string;
     };
   };
+}
+
+function formatShortSha(commitHash: string): string {
+  return commitHash.substring(0, 10);
 }
 
 export class GitHubService {
@@ -58,10 +57,28 @@ export class GitHubService {
     return execSync('git rev-parse --short=10 HEAD', { encoding: 'utf8' }).trim();
   }
 
-  getTargetBranch(): string {
+  async getTargetBranch(): Promise<string> {
     const dispatchTargetBranch = getInput('dispatch_target_branch');
-    const targetBranch = getInput('target_branch') || 'main';
-    return dispatchTargetBranch || targetBranch;
+    const configuredTargetBranch = dispatchTargetBranch || getInput('target_branch');
+    if (configuredTargetBranch) {
+      return configuredTargetBranch;
+    }
+
+    const { owner, repo } = this.repository;
+    try {
+      const repositoryResponse = await this.octokit.rest.repos.get({ owner, repo });
+      const defaultBranch = repositoryResponse.data?.default_branch;
+      if (!defaultBranch) {
+        throw new Error('Repository default branch is unavailable');
+      }
+      return defaultBranch;
+    } catch (error) {
+      const apiError = error as ApiError;
+      console.warn(
+        `⚠️  Failed to get repository default branch: ${apiError.message}. Falling back to main.`,
+      );
+      return 'main';
+    }
   }
 
   async listWorkflowRuns(params: WorkflowRunParams) {
@@ -81,9 +98,9 @@ export class GitHubService {
   /**
    * Check if a commit has any artifacts by checking its workflow runs
    */
-  async hasArtifactsForCommit(commitHash: string): Promise<boolean> {
+  async hasArtifactsForCommit(commitHash: string, branch?: string): Promise<boolean> {
     try {
-      const workflowRuns = await this.findAllWorkflowRunsByCommit(commitHash);
+      const workflowRuns = await this.findAllWorkflowRunsByCommit(commitHash, 'completed', branch);
       
       for (const workflowRun of workflowRuns) {
         try {
@@ -118,7 +135,7 @@ export class GitHubService {
       });
       
       if (commitResponse.data.parents && commitResponse.data.parents.length > 0) {
-        return commitResponse.data.parents[0].sha.substring(0, 10);
+        return commitResponse.data.parents[0].sha;
       }
       
       return null;
@@ -130,119 +147,32 @@ export class GitHubService {
   }
 
   async getTargetBranchLatestCommit(): Promise<{ commitHash: string; usedFallbackCommit: boolean; latestCommitHash?: string }> {
-    const targetBranch = this.getTargetBranch();
+    const targetBranch = await this.getTargetBranch();
     console.log(`🔍 Attempting to get latest commit for target branch: ${targetBranch}`);
     console.log(`📋 Repository: ${this.repository.owner}/${this.repository.repo}`);
-    
-    let latestCommitHash: string | null = null;
     
     try {
       console.log(`📡 Trying to get latest commit from GitHub API...`);
       const { owner, repo } = this.repository;
-      
-      try {
-        const branchResponse = await this.octokit.rest.repos.getBranch({
-          owner,
-          repo,
-          branch: targetBranch
-        });
-        
-        if (branchResponse.data && branchResponse.data.commit) {
-          latestCommitHash = branchResponse.data.commit.sha.substring(0, 10);
-          console.log(`✅ Found commit hash from GitHub API: ${latestCommitHash}`);
-        }
-      } catch (error) {
-        const apiError = error as ApiError;
-        console.warn(`⚠️  GitHub API failed: ${apiError.message}`);
-        
-        const alternativeBranches = ['master', 'main', 'develop'];
-        for (const altBranch of alternativeBranches) {
-          if (altBranch !== targetBranch) {
-            try {
-              console.log(`🔄 Trying alternative branch: ${altBranch}`);
-              const altResponse = await this.octokit.rest.repos.getBranch({
-                owner,
-                repo,
-                branch: altBranch
-              });
-              
-              if (altResponse.data && altResponse.data.commit) {
-                latestCommitHash = altResponse.data.commit.sha.substring(0, 10);
-                console.log(`✅ Found commit hash from alternative branch ${altBranch}: ${latestCommitHash}`);
-                break;
-              }
-            } catch (error) {
-              const altError = error as ApiError;
-              console.log(`❌ Alternative branch ${altBranch} also failed: ${altError.message}`);
-            }
-          }
-        }
-      }
-
+      const branchResponse = await this.octokit.rest.repos.getBranch({
+        owner,
+        repo,
+        branch: targetBranch
+      });
+      const latestCommitHash = branchResponse.data?.commit?.sha;
       if (!latestCommitHash) {
-        console.log(`📋 Trying to get from workflow runs...`);
-        try {
-          const runs = await this.listWorkflowRuns({
-            branch: targetBranch,
-            status: 'completed',
-            limit: 10
-          });
-
-          if (runs.workflow_runs && runs.workflow_runs.length > 0) {
-            console.log(`Found ${runs.workflow_runs.length} workflow runs for ${targetBranch}`);
-            
-            const successfulRun = runs.workflow_runs.find((run: WorkflowRun) => run.conclusion === 'success');
-            if (successfulRun) {
-              latestCommitHash = successfulRun.head_sha.substring(0, 10);
-              console.log(`✅ Found successful workflow run for ${targetBranch}: ${latestCommitHash}`);
-            } else {
-              const latestRun = runs.workflow_runs[0] as WorkflowRun;
-              latestCommitHash = latestRun.head_sha.substring(0, 10);
-              console.log(`⚠️  No successful runs found, using latest workflow run for ${targetBranch}: ${latestCommitHash}`);
-            }
-          }
-        } catch (error) {
-          const workflowError = error as ApiError;
-          console.warn(`⚠️  Failed to get workflow runs: ${workflowError.message}`);
-        }
+        throw new Error(`Target branch (${targetBranch}) has no commit hash`);
       }
+      console.log(`✅ Found commit hash from GitHub API: ${formatShortSha(latestCommitHash)}`);
 
-      if (!latestCommitHash) {
-        console.log(`🔧 No workflow runs found for ${targetBranch}, trying to fetch from remote...`);
-        try {
-          console.log(`📥 Running: git fetch origin`);
-          execSync('git fetch origin', { encoding: 'utf8' });
-          
-          console.log(`📥 Running: git rev-parse --short=10 origin/${targetBranch}`);
-          latestCommitHash = execSync(`git rev-parse --short=10 origin/${targetBranch}`, { encoding: 'utf8' }).trim();
-          console.log(`✅ Found commit hash from git: ${latestCommitHash}`);
-        } catch (gitError) {
-          console.warn(`❌ Git fetch failed: ${gitError}`);
-          
-          try {
-            console.log(`📥 Trying alternative: git ls-remote origin ${targetBranch}`);
-            const remoteRef = execSync(`git ls-remote origin ${targetBranch}`, { encoding: 'utf8' }).trim();
-            if (remoteRef) {
-              latestCommitHash = remoteRef.split('\t')[0].substring(0, 10);
-              console.log(`✅ Found commit hash from git ls-remote: ${latestCommitHash}`);
-            }
-          } catch (altError) {
-            console.warn(`❌ Alternative git command failed: ${altError}`);
-          }
-        }
-      }
-
-      if (!latestCommitHash) {
-        console.error(`❌ All methods to get target branch commit have failed`);
-        throw new Error(`Unable to get target branch (${targetBranch}) commit hash. Please ensure the branch exists and you have correct permissions.`);
-      }
+      const latestShortHash = formatShortSha(latestCommitHash);
 
       // Check if the latest commit has artifacts, if not, look for previous commits
-      console.log(`🔍 Checking if commit ${latestCommitHash} has baseline artifacts...`);
-      const hasArtifacts = await this.hasArtifactsForCommit(latestCommitHash);
+      console.log(`🔍 Checking if commit ${latestShortHash} has baseline artifacts...`);
+      const hasArtifacts = await this.hasArtifactsForCommit(latestCommitHash, targetBranch);
       
       if (hasArtifacts) {
-        console.log(`✅ Commit ${latestCommitHash} has baseline artifacts`);
+        console.log(`✅ Commit ${latestShortHash} has baseline artifacts`);
         return {
           commitHash: latestCommitHash,
           usedFallbackCommit: false
@@ -250,11 +180,11 @@ export class GitHubService {
       }
 
       // Latest commit doesn't have artifacts, look for previous commits
-      console.log(`⚠️  Commit ${latestCommitHash} does not have baseline artifacts`);
+      console.log(`⚠️  Commit ${latestShortHash} does not have baseline artifacts`);
       console.log(`🔍 Looking for previous commits with baseline artifacts...`);
       
       let currentCommit = latestCommitHash;
-      let checkedCommits: string[] = [currentCommit];
+      const checkedCommits: string[] = [currentCommit];
       const maxDepth = 5;
       
       for (let depth = 0; depth < maxDepth; depth++) {
@@ -271,14 +201,15 @@ export class GitHubService {
         }
         
         checkedCommits.push(parentCommit);
-        console.log(`🔍 Checking parent commit ${parentCommit}...`);
+        const parentShortHash = formatShortSha(parentCommit);
+        console.log(`🔍 Checking parent commit ${parentShortHash}...`);
         
-        const parentHasArtifacts = await this.hasArtifactsForCommit(parentCommit);
+        const parentHasArtifacts = await this.hasArtifactsForCommit(parentCommit, targetBranch);
         
         if (parentHasArtifacts) {
-          console.log(`✅ Found commit ${parentCommit} with baseline artifacts`);
-          console.log(`\n⚠️  Note: The latest commit (${latestCommitHash}) does not have baseline artifacts.`);
-          console.log(`   Using commit ${parentCommit} for baseline comparison instead.`);
+          console.log(`✅ Found commit ${parentShortHash} with baseline artifacts`);
+          console.log(`\n⚠️  Note: The latest commit (${latestShortHash}) does not have baseline artifacts.`);
+          console.log(`   Using commit ${parentShortHash} for baseline comparison instead.`);
           console.log(`   If this seems incorrect, please wait a few minutes and try rerunning the workflow.`);
           return {
             commitHash: parentCommit,
@@ -292,7 +223,7 @@ export class GitHubService {
       
       // No commits with artifacts found
       console.log(`\n⚠️  No commits with baseline artifacts found in the last ${maxDepth} commits.`);
-      console.log(`   Using latest commit ${latestCommitHash} anyway.`);
+      console.log(`   Using latest commit ${latestShortHash} anyway.`);
       console.log(`   Note: If baseline comparison fails, please wait a few minutes and try rerunning the workflow.`);
       return {
         commitHash: latestCommitHash,
@@ -325,7 +256,11 @@ export class GitHubService {
    * Find workflow run by commit hash
    * This is more efficient than listing all artifacts
    */
-  async findWorkflowRunByCommit(commitHash: string, status: 'completed' | 'in_progress' | 'queued' | 'requested' = 'completed') {
+  async findWorkflowRunByCommit(
+    commitHash: string,
+    status: 'completed' | 'in_progress' | 'queued' | 'requested' = 'completed',
+    branch?: string,
+  ) {
     const { owner, repo } = this.repository;
     
     try {
@@ -333,6 +268,7 @@ export class GitHubService {
       const runsResponse = await this.octokit.rest.actions.listWorkflowRunsForRepo({
         owner,
         repo,
+        branch,
         head_sha: commitHash,
         status,
         per_page: 10
@@ -351,6 +287,7 @@ export class GitHubService {
       const allRunsResponse = await this.octokit.rest.actions.listWorkflowRunsForRepo({
         owner,
         repo,
+        branch,
         status,
         per_page: 100
       });
@@ -371,7 +308,11 @@ export class GitHubService {
    * Find all workflow runs by commit hash
    * Returns all matching workflow runs without sorting
    */
-  async findAllWorkflowRunsByCommit(commitHash: string, status: 'completed' | 'in_progress' | 'queued' | 'requested' = 'completed') {
+  async findAllWorkflowRunsByCommit(
+    commitHash: string,
+    status: 'completed' | 'in_progress' | 'queued' | 'requested' = 'completed',
+    branch?: string,
+  ) {
     const { owner, repo } = this.repository;
     
     try {
@@ -379,6 +320,7 @@ export class GitHubService {
       const runsResponse = await this.octokit.rest.actions.listWorkflowRunsForRepo({
         owner,
         repo,
+        branch,
         head_sha: commitHash,
         status,
         per_page: 30  // Increase to get more runs
@@ -394,6 +336,7 @@ export class GitHubService {
       const allRunsResponse = await this.octokit.rest.actions.listWorkflowRunsForRepo({
         owner,
         repo,
+        branch,
         status,
         per_page: 100
       });

@@ -11,7 +11,8 @@ const artifactZip = Buffer.from(
 );
 
 describe('Download Module', () => {
-  const commitHash = 'abc1234567';
+  const commitHash = 'abc1234567abc1234567abc1234567abc1234567';
+  const shortCommitHash = commitHash.substring(0, 10);
   const filePath = '/tmp/test/rsdoctor-data.json';
   const fileName = 'rsdoctor-data.json';
   const workflowRunId = 123;
@@ -92,7 +93,7 @@ describe('Download Module', () => {
 
   it('should find artifacts that use the rsdoctor-prefixed name', async () => {
     const pathHash = getPathHash();
-    const artifactName = createArtifactName(pathHash, commitHash);
+    const artifactName = createArtifactName(pathHash, shortCommitHash);
     const downloadScope = mockArtifactSearch(artifactName, 101);
 
     await expect(downloadArtifactByCommitHash(commitHash, fileName, filePath)).rejects.toThrow();
@@ -102,7 +103,7 @@ describe('Download Module', () => {
 
   it('should find artifacts that use the legacy unprefixed name', async () => {
     const pathHash = getPathHash();
-    const downloadScope = mockArtifactSearch(`${pathHash}-${commitHash}`, 202);
+    const downloadScope = mockArtifactSearch(`${pathHash}-${shortCommitHash}`, 202);
 
     await expect(downloadArtifactByCommitHash(commitHash, fileName, filePath)).rejects.toThrow();
 
@@ -111,7 +112,17 @@ describe('Download Module', () => {
 
   it('should find artifacts that use the legacy unprefixed name with extension', async () => {
     const pathHash = getPathHash();
-    const downloadScope = mockArtifactSearch(`${pathHash}-${commitHash}.json`, 303);
+    const downloadScope = mockArtifactSearch(`${pathHash}-${shortCommitHash}.json`, 303);
+
+    await expect(downloadArtifactByCommitHash(commitHash, fileName, filePath)).rejects.toThrow();
+
+    expect(downloadScope.isDone()).toBe(true);
+  });
+
+  it('should also find artifacts that use a full SHA name', async () => {
+    const pathHash = getPathHash();
+    const artifactName = createArtifactName(pathHash, commitHash);
+    const downloadScope = mockArtifactSearch(artifactName, 404);
 
     await expect(downloadArtifactByCommitHash(commitHash, fileName, filePath)).rejects.toThrow();
 
