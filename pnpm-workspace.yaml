@@ -1,2 +1,6 @@
 packages:
   - 'examples/**'
+
+minimumReleaseAgeExclude:
+  - '@rspack/*'
+  - '@rsbuild/*'
