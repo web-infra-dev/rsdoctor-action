@@ -350,7 +350,7 @@ export async function generateBundleAnalysisReport(
 ): Promise<void> {
   if (!baseline) {
     await summary
-      .addRaw('> ⚠️ **No baseline data found** - Unable to perform comparison analysis')
+      .addRaw('> ⚠️ **No baseline data found** - Unable to perform comparison analysis\n\n')
       .addSeparator();
   } else {
     if (baselineCommitHash) {
@@ -365,7 +365,7 @@ export async function generateBundleAnalysisReport(
         baselineInfo += ` | **PR:** ${prLinks}`;
       }
       
-      await summary.addRaw(baselineInfo);
+      await summary.addRaw(`${baselineInfo}\n\n`);
     }
     await summary.addSeparator();
   }
