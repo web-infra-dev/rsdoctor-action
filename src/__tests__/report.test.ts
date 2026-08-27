@@ -1,4 +1,5 @@
 import * as path from 'path';
+import { summary } from '@actions/core';
 import {
   parseRsdoctorData,
   generateProjectMarkdown,
@@ -99,8 +100,9 @@ describe('Report Module', () => {
 
     it('should generate report without baseline', async () => {
       await generateBundleAnalysisReport(mockAnalysis);
-      // GitHub Actions summary is mocked in setup.ts
-      expect(true).toBe(true);
+      expect(summary.addRaw).toHaveBeenCalledWith(
+        '> ⚠️ **No baseline data found** - Unable to perform comparison analysis\n\n',
+      );
     });
 
     it('should generate report with baseline', async () => {
@@ -109,9 +111,15 @@ describe('Report Module', () => {
         totalSize: 512 * 1024,
         totalGzipSize: 256 * 1024,
       };
-      await generateBundleAnalysisReport(mockAnalysis, baseline);
-      // GitHub Actions summary is mocked in setup.ts
-      expect(true).toBe(true);
+      await generateBundleAnalysisReport(
+        mockAnalysis,
+        baseline,
+        true,
+        'abc123',
+      );
+      expect(summary.addRaw).toHaveBeenCalledWith(
+        expect.stringMatching(/^> 📌 \*\*Baseline Commit:\*\*.*\n\n$/),
+      );
     });
   });
 });

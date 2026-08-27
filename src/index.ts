@@ -434,7 +434,7 @@ async function processSingleFile(
             if (!report.current) continue;
             
             await summary.addHeading(`📁 ${report.projectName}`, 3);
-            await summary.addRaw(`**Path:** \`${report.filePath}\``);
+            await summary.addRaw(`**Path:** \`${report.filePath}\`\n\n`);
             await generateBundleAnalysisReport(report.current, undefined, false, null, undefined);
           }
           
@@ -488,7 +488,7 @@ async function processSingleFile(
             if (!report.current) continue;
             
             await summary.addHeading(`📁 ${report.projectName}`, 3);
-            await summary.addRaw(`**Path:** \`${report.filePath}\``);
+            await summary.addRaw(`**Path:** \`${report.filePath}\`\n\n`);
 
             await generateBundleAnalysisReport(report.current, report.baseline || undefined, false, report.baselineCommitHash, report.baselinePRs);
           }
