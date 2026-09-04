@@ -212,20 +212,9 @@ We're actively working on enhancing the Rsdoctor Action with the following plann
 
 ## Development
 
-Use Node.js 22 (22.18 or later), or Node.js 24.3 or later, with pnpm. The action project uses [Rstack CLI](https://rstack.rs/) for builds, tests, linting, formatting, and Git hooks. The example projects keep their standalone Rsbuild setup.
-
 ```bash
 # Install dependencies
 pnpm install
-
-# Check lint and formatting
-pnpm run check
-
-# Format files
-pnpm run format
-
-# Run unit tests
-pnpm run test
 
 # Build the action
 pnpm run build
@@ -235,5 +224,3 @@ cd examples/rsbuild-demo
 pnpm install
 pnpm run build
 ```
-
-The `prepare` script installs Git hooks with `rs hooks`. The pre-commit hook runs `rs staged` to lint and format staged files in the main project, excluding the examples.

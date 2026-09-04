@@ -195,20 +195,9 @@ MIT 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情。
 
 ## 开发
 
-使用 Node.js 22（22.18 及以上）或 Node.js 24.3 及以上版本，以及 pnpm。主项目通过 [Rstack CLI](https://rstack.rs/) 统一构建、测试、lint、格式化和 Git hooks。示例项目保留原有的独立 Rsbuild 配置。
-
 ```bash
 # 安装依赖
 pnpm install
-
-# 检查 lint 和格式
-pnpm run check
-
-# 格式化文件
-pnpm run format
-
-# 运行单元测试
-pnpm run test
 
 # 构建 Action
 pnpm run build
@@ -218,5 +207,3 @@ cd examples/rsbuild-demo
 pnpm install
 pnpm run build
 ```
-
-`prepare` 脚本通过 `rs hooks` 安装 Git hooks，pre-commit hook 调用 `rs staged` 检查并格式化主项目的暂存文件，不包含示例项目。
