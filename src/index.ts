@@ -2,7 +2,17 @@ import { setFailed, getInput, summary } from '@actions/core';
 import { uploadArtifact, hashPath } from './upload';
 import { downloadArtifactByCommitHash } from './download';
 import { GitHubService } from './github';
-import { loadSizeData, generateSizeReport, parseRsdoctorData, generateBundleAnalysisReport, BundleAnalysis, generateProjectMarkdown, formatBytes, calculateDiff, enrichRsdoctorDataWithGzip } from './report';
+import {
+  loadSizeData,
+  generateSizeReport,
+  parseRsdoctorData,
+  generateBundleAnalysisReport,
+  BundleAnalysis,
+  generateProjectMarkdown,
+  formatBytes,
+  calculateDiff,
+  enrichRsdoctorDataWithGzip,
+} from './report';
 import type { AIAnalysisResult } from './ai-analysis';
 import { isAIAnalysisEnabled } from './ai-config';
 import path from 'path';
@@ -23,7 +33,9 @@ function isPullRequestEvent(): boolean {
     // Skip if PR is closed (whether merged or not) - upload happens on push event after merge
     if (prAction === 'closed') {
       if (prMerged === true) {
-        console.log(`ℹ️  PR is closed and merged - upload will happen on push event`);
+        console.log(
+          `ℹ️  PR is closed and merged - upload will happen on push event`,
+        );
       } else {
         console.log(`ℹ️  PR is closed but not merged - skipping processing`);
       }
@@ -34,7 +46,9 @@ function isPullRequestEvent(): boolean {
     console.log(`   Action: ${prAction}`);
     console.log(`   PR #${prNumber}: ${headRef} -> ${baseRef}`);
     console.log(`   Merged: ${prMerged}`);
-    console.log(`   This is a PR review/update event - comparing with baseline (no upload)`);
+    console.log(
+      `   This is a PR review/update event - comparing with baseline (no upload)`,
+    );
   }
 
   return isPR;
@@ -43,37 +57,39 @@ function isPullRequestEvent(): boolean {
 async function isPushEvent(githubService: GitHubService): Promise<boolean> {
   const { context } = require('@actions/github');
   const isPush = context.eventName === 'push';
-  
+
   if (isPush) {
     const ref = context.ref;
     const targetBranch = await githubService.getTargetBranch();
     const targetBranchRef = `refs/heads/${targetBranch}`;
-    
+
     // Check if this push is to the resolved target branch
     if (ref === targetBranchRef) {
       console.log(`🔄 Detected push event to ${targetBranch} branch`);
       console.log(`   This may be a merge commit - will upload artifacts`);
       return true;
     } else {
-      console.log(`ℹ️  Push event detected but not to target branch (${targetBranch})`);
+      console.log(
+        `ℹ️  Push event detected but not to target branch (${targetBranch})`,
+      );
       console.log(`   Current ref: ${ref}`);
       return false;
     }
   }
-  
+
   return false;
 }
 
 function isWorkflowDispatchEvent(): boolean {
   const { context } = require('@actions/github');
   const isDispatch = context.eventName === 'workflow_dispatch';
-  
+
   if (isDispatch) {
     console.log(`🔧 Detected workflow_dispatch event`);
     console.log(`   This is a manually triggered workflow`);
     return true;
   }
-  
+
   return false;
 }
 
@@ -104,11 +120,18 @@ interface ProjectReport {
   aiAnalysis?: AIAnalysisResult | null;
 }
 
-function hasBundleAnalysisChange(current: BundleAnalysis, baseline: BundleAnalysis | null): boolean {
+function hasBundleAnalysisChange(
+  current: BundleAnalysis,
+  baseline: BundleAnalysis | null,
+): boolean {
   if (!baseline) return true;
 
-  const hasMetricChanged = (currentSize?: number, baselineSize?: number): boolean => {
-    if (typeof currentSize !== 'number' || typeof baselineSize !== 'number') return false;
+  const hasMetricChanged = (
+    currentSize?: number,
+    baselineSize?: number,
+  ): boolean => {
+    if (typeof currentSize !== 'number' || typeof baselineSize !== 'number')
+      return false;
     if (baselineSize === 0 || isNaN(baselineSize)) return false;
     return currentSize - baselineSize !== 0;
   };
@@ -120,11 +143,19 @@ function hasBundleAnalysisChange(current: BundleAnalysis, baseline: BundleAnalys
 }
 
 function formatGzipSize(analysis: BundleAnalysis): string {
-  return typeof analysis.totalGzipSize === 'number' ? formatBytes(analysis.totalGzipSize) : '-';
+  return typeof analysis.totalGzipSize === 'number'
+    ? formatBytes(analysis.totalGzipSize)
+    : '-';
 }
 
-function calculateGzipDiff(current: BundleAnalysis, baseline?: BundleAnalysis | null): { value: string; emoji: string } {
-  if (typeof current.totalGzipSize !== 'number' || typeof baseline?.totalGzipSize !== 'number') {
+function calculateGzipDiff(
+  current: BundleAnalysis,
+  baseline?: BundleAnalysis | null,
+): { value: string; emoji: string } {
+  if (
+    typeof current.totalGzipSize !== 'number' ||
+    typeof baseline?.totalGzipSize !== 'number'
+  ) {
     return { value: '-', emoji: '' };
   }
 
@@ -134,12 +165,21 @@ function calculateGzipDiff(current: BundleAnalysis, baseline?: BundleAnalysis | 
 export function extractProjectName(filePath: string): string {
   const relativePath = path.relative(process.cwd(), filePath);
   const pathParts = relativePath.split(path.sep);
-  
+
   const buildOutputDirs = ['dist', '.rsdoctor', 'output', '.next', 'public'];
-  
-  const monorepoPatterns = ['packages', 'apps', 'projects', 'libs', 'modules', 'examples'];
-  const patternIndex = pathParts.findIndex(part => monorepoPatterns.includes(part));
-  
+
+  const monorepoPatterns = [
+    'packages',
+    'apps',
+    'projects',
+    'libs',
+    'modules',
+    'examples',
+  ];
+  const patternIndex = pathParts.findIndex((part) =>
+    monorepoPatterns.includes(part),
+  );
+
   if (patternIndex >= 0 && patternIndex + 1 < pathParts.length) {
     let packageName: string | null = null;
     let packageNameIndex = -1;
@@ -161,14 +201,14 @@ export function extractProjectName(filePath: string): string {
       return packageName;
     }
   }
-  
+
   for (let i = pathParts.length - 2; i >= 0; i--) {
     const part = pathParts[i];
     if (!buildOutputDirs.includes(part)) {
       return part;
     }
   }
-  
+
   // Last resort: use first meaningful part
   return pathParts[0] || 'root';
 }
@@ -191,34 +231,40 @@ async function processSingleFile(
   const fileNameWithoutExt = path.parse(fileName).name;
   const fileExt = path.parse(fileName).ext;
   const projectName = extractProjectName(fullPath);
-  
+
   console.log(`\n📦 Processing project: ${projectName}`);
   console.log(`   File: ${relativePath}`);
-  
+
   const report: ProjectReport = {
     projectName,
     filePath: relativePath,
     current: null,
-    baseline: null
+    baseline: null,
   };
-  
+
   // Parse current bundle analysis
   const currentBundleAnalysis = parseRsdoctorData(fullPath);
   if (!currentBundleAnalysis) {
-    console.warn(`⚠️ Failed to parse rsdoctor data from ${fullPath}, skipping...`);
+    console.warn(
+      `⚠️ Failed to parse rsdoctor data from ${fullPath}, skipping...`,
+    );
     return report;
   }
   report.current = currentBundleAnalysis;
-  
+
   let baselineJsonPath: string | null = null;
   let baselinePRs: Array<{ number: number; title: string; url: string }> = [];
   if (targetCommitHash) {
     try {
       console.log(`📥 Attempting to download baseline for ${projectName}...`);
       // Pass filePath to ensure we download the correct artifact by path hash
-      const downloadResult = await downloadArtifactByCommitHash(targetCommitHash, fileName, fullPath);
+      const downloadResult = await downloadArtifactByCommitHash(
+        targetCommitHash,
+        fileName,
+        fullPath,
+      );
       baselineJsonPath = path.join(downloadResult.downloadPath, fileName);
-      
+
       console.log(`📁 Downloaded baseline file path: ${baselineJsonPath}`);
       const baselineBundleAnalysis = parseRsdoctorData(baselineJsonPath);
       if (baselineBundleAnalysis) {
@@ -226,38 +272,51 @@ async function processSingleFile(
         report.baselineCommitHash = targetCommitHash;
         report.baselineUsedFallback = baselineUsedFallback;
         report.baselineLatestCommitHash = baselineLatestCommitHash;
-        
+
         // Try to find associated PRs for the baseline commit
         try {
           const githubService = new GitHubService();
           baselinePRs = await githubService.findPRsByCommit(targetCommitHash);
           if (baselinePRs.length > 0) {
             report.baselinePRs = baselinePRs;
-            console.log(`📎 Found ${baselinePRs.length} PR(s) associated with baseline commit ${targetCommitHash}`);
+            console.log(
+              `📎 Found ${baselinePRs.length} PR(s) associated with baseline commit ${targetCommitHash}`,
+            );
           }
         } catch (prError) {
           console.log(`ℹ️  Could not find PRs for baseline commit: ${prError}`);
         }
-        
-        console.log(`✅ Successfully downloaded and parsed baseline for ${projectName}`);
+
+        console.log(
+          `✅ Successfully downloaded and parsed baseline for ${projectName}`,
+        );
       }
     } catch (downloadError) {
-      console.log(`❌ Failed to download baseline for ${projectName}: ${downloadError}`);
-      console.log(`ℹ️  No baseline data found for ${projectName} - skipping bundle diff for this project`);
+      console.log(
+        `❌ Failed to download baseline for ${projectName}: ${downloadError}`,
+      );
+      console.log(
+        `ℹ️  No baseline data found for ${projectName} - skipping bundle diff for this project`,
+      );
       // Don't set baseline, so bundle diff won't be generated
       baselineJsonPath = null;
     }
   }
-  
+
   // Generate rsdoctor HTML diff if baseline exists
   if (report.baseline && baselineJsonPath) {
     try {
       const tempOutDir = process.cwd();
       const targetArtifactName = `${pathParts.join('-')}-${fileNameWithoutExt}-${targetCommitHash}${fileExt}`;
-      console.log(`🔍 Looking for target artifact: ${pathParts.join('-')}-${fileNameWithoutExt}-${targetCommitHash}${fileExt}`);
+      console.log(
+        `🔍 Looking for target artifact: ${pathParts.join('-')}-${fileNameWithoutExt}-${targetCommitHash}${fileExt}`,
+      );
 
       const safeProjectName = projectName.replace(/\//g, '-');
-      const diffHtmlPath = path.join(tempOutDir, `rsdoctor-diff-${safeProjectName}.html`);
+      const diffHtmlPath = path.join(
+        tempOutDir,
+        `rsdoctor-diff-${safeProjectName}.html`,
+      );
 
       try {
         await runRsdoctorBundleDiff({
@@ -269,27 +328,40 @@ async function processSingleFile(
       } catch (e) {
         console.log(`⚠️ Failed to generate rsdoctor HTML diff: ${e}`);
       }
-      
+
       if (!report.diffHtmlPath) {
         report.diffHtmlPath = diffHtmlPath;
       }
-      
+
       if (fs.existsSync(report.diffHtmlPath)) {
         try {
-          const uploadRes = await uploadArtifact(report.diffHtmlPath, currentCommitHash);
+          const uploadRes = await uploadArtifact(
+            report.diffHtmlPath,
+            currentCommitHash,
+          );
           if (typeof uploadRes.id === 'number') {
             report.diffHtmlArtifactId = uploadRes.id;
-            console.log(`✅ Uploaded bundle diff HTML for ${projectName}, artifact id: ${uploadRes.id}`);
+            console.log(
+              `✅ Uploaded bundle diff HTML for ${projectName}, artifact id: ${uploadRes.id}`,
+            );
           }
         } catch (e) {
-          console.warn(`⚠️ Failed to upload diff html for ${projectName}: ${e}`);
+          console.warn(
+            `⚠️ Failed to upload diff html for ${projectName}: ${e}`,
+          );
         }
       }
 
       // Generate JSON diff for AI analysis (requires @rsdoctor/cli >= 1.5.6-canary.0)
-      if (aiToken && hasBundleAnalysisChange(currentBundleAnalysis, report.baseline)) {
+      if (
+        aiToken &&
+        hasBundleAnalysisChange(currentBundleAnalysis, report.baseline)
+      ) {
         try {
-          const diffJsonPath = path.join(tempOutDir, `rsdoctor-diff-${safeProjectName}.json`);
+          const diffJsonPath = path.join(
+            tempOutDir,
+            `rsdoctor-diff-${safeProjectName}.json`,
+          );
 
           try {
             await runRsdoctorBundleDiff({
@@ -305,12 +377,18 @@ async function processSingleFile(
           const { analyzeWithAI } = await import(
             /* webpackChunkName: "ai-analysis" */ './ai-analysis'
           );
-          report.aiAnalysis = await analyzeWithAI(diffJsonPath, aiToken, aiModel);
+          report.aiAnalysis = await analyzeWithAI(
+            diffJsonPath,
+            aiToken,
+            aiModel,
+          );
         } catch (e) {
           console.warn(`⚠️ Failed to generate JSON diff for AI analysis: ${e}`);
         }
       } else if (aiToken) {
-        console.log(`ℹ️  No bundle changes detected for ${projectName}, skipping AI analysis`);
+        console.log(
+          `ℹ️  No bundle changes detected for ${projectName}, skipping AI analysis`,
+        );
       }
     } catch (e) {
       console.warn(`⚠️ rsdoctor bundle-diff failed for ${projectName}: ${e}`);
@@ -323,27 +401,29 @@ async function processSingleFile(
 (async () => {
   try {
     const githubService = new GitHubService();
-    
+
     const filePathPattern = getInput('file_path');
     if (!filePathPattern) {
       throw new Error('file_path is required');
     }
-    
+
     const matchedFiles = await fg(filePathPattern, {
       cwd: process.cwd(),
       absolute: true,
-      onlyFiles: true
+      onlyFiles: true,
     });
-    
+
     if (matchedFiles.length === 0) {
       throw new Error(`No files found matching pattern: ${filePathPattern}`);
     }
-    
-    console.log(`📁 Found ${matchedFiles.length} file(s) matching pattern: ${filePathPattern}`);
+
+    console.log(
+      `📁 Found ${matchedFiles.length} file(s) matching pattern: ${filePathPattern}`,
+    );
     matchedFiles.forEach((file, index) => {
       console.log(`  ${index + 1}. ${file}`);
     });
-    
+
     const currentCommitHash = githubService.getCurrentCommitHash();
     console.log(`Current commit hash: ${currentCommitHash}`);
 
@@ -361,11 +441,11 @@ async function processSingleFile(
     let targetCommitHash: string | null = null;
     let baselineUsedFallback = false;
     let baselineLatestCommitHash: string | undefined = undefined;
-    
+
     const isPush = await isPushEvent(githubService);
     const isPR = isPullRequestEvent();
     const isDispatch = isWorkflowDispatchEvent();
-    
+
     // For PR and workflow_dispatch, try to get baseline for comparison
     if (isPR || isDispatch) {
       try {
@@ -376,29 +456,38 @@ async function processSingleFile(
         baselineLatestCommitHash = commitInfo.latestCommitHash;
         console.log(`✅ Target branch commit hash: ${targetCommitHash}`);
         if (baselineUsedFallback && baselineLatestCommitHash) {
-          console.log(`⚠️  Using fallback commit: ${targetCommitHash} (latest: ${baselineLatestCommitHash})`);
+          console.log(
+            `⚠️  Using fallback commit: ${targetCommitHash} (latest: ${baselineLatestCommitHash})`,
+          );
         }
       } catch (error) {
         console.error(`❌ Failed to get target branch commit: ${error}`);
         console.log('📝 No baseline data available for comparison');
       }
     }
-    
+
     const projectReports: ProjectReport[] = [];
-    
+
     if (isPush) {
-      console.log('🔄 Detected push event to target branch - uploading artifacts');
-      
+      console.log(
+        '🔄 Detected push event to target branch - uploading artifacts',
+      );
+
       for (const fullPath of matchedFiles) {
         enrichRsdoctorDataWithGzip(fullPath);
-        const uploadResponse = await uploadArtifact(fullPath, currentCommitHash);
-        
+        const uploadResponse = await uploadArtifact(
+          fullPath,
+          currentCommitHash,
+        );
+
         if (typeof uploadResponse.id !== 'number') {
           console.warn(`⚠️ Artifact upload failed for ${fullPath}`);
         } else {
-          console.log(`✅ Successfully uploaded artifact with ID: ${uploadResponse.id}`);
+          console.log(
+            `✅ Successfully uploaded artifact with ID: ${uploadResponse.id}`,
+          );
         }
-        
+
         // Collect project data for combined summary
         const currentBundleAnalysis = parseRsdoctorData(fullPath);
         if (currentBundleAnalysis) {
@@ -408,7 +497,7 @@ async function processSingleFile(
             projectName,
             filePath: relativePath,
             current: currentBundleAnalysis,
-            baseline: null
+            baseline: null,
           });
         } else {
           const currentSizeData = loadSizeData(fullPath);
@@ -418,100 +507,151 @@ async function processSingleFile(
           }
         }
       }
-      
+
       // Generate combined summary for all projects in push event
       if (projectReports.length > 0) {
         if (projectReports.length === 1) {
           // Single project: use existing report format
           const report = projectReports[0];
           if (report.current) {
-            await generateBundleAnalysisReport(report.current, undefined, true, null, undefined);
+            await generateBundleAnalysisReport(
+              report.current,
+              undefined,
+              true,
+              null,
+              undefined,
+            );
           }
         } else {
           await summary.addHeading('📦 Monorepo Bundle Analysis', 2);
-          
+
           for (const report of projectReports) {
             if (!report.current) continue;
-            
+
             await summary.addHeading(`📁 ${report.projectName}`, 3);
             await summary.addRaw(`**Path:** \`${report.filePath}\`\n\n`);
-            await generateBundleAnalysisReport(report.current, undefined, false, null, undefined);
+            await generateBundleAnalysisReport(
+              report.current,
+              undefined,
+              false,
+              null,
+              undefined,
+            );
           }
-          
+
           await summary.write();
         }
       }
-      
     } else if (isDispatch || isPR) {
       if (isDispatch) {
-        console.log('🔧 Processing workflow_dispatch event - uploading artifacts and comparing with baseline');
+        console.log(
+          '🔧 Processing workflow_dispatch event - uploading artifacts and comparing with baseline',
+        );
       } else {
         console.log('📥 Detected pull request event - processing files');
       }
-      
+
       for (const fullPath of matchedFiles) {
-        const report = await processSingleFile(fullPath, currentCommitHash, targetCommitHash, baselineUsedFallback, baselineLatestCommitHash, aiToken, aiModel);
+        const report = await processSingleFile(
+          fullPath,
+          currentCommitHash,
+          targetCommitHash,
+          baselineUsedFallback,
+          baselineLatestCommitHash,
+          aiToken,
+          aiModel,
+        );
         projectReports.push(report);
-        
+
         // For workflow_dispatch, also upload artifacts
         if (isDispatch) {
           enrichRsdoctorDataWithGzip(fullPath);
-          const uploadResponse = await uploadArtifact(fullPath, currentCommitHash);
+          const uploadResponse = await uploadArtifact(
+            fullPath,
+            currentCommitHash,
+          );
           if (typeof uploadResponse.id !== 'number') {
             console.warn(`⚠️ Artifact upload failed for ${fullPath}`);
           } else {
-            console.log(`✅ Successfully uploaded artifact with ID: ${uploadResponse.id}`);
+            console.log(
+              `✅ Successfully uploaded artifact with ID: ${uploadResponse.id}`,
+            );
           }
         }
       }
-      
+
       if (projectReports.length > 0) {
         if (projectReports.length === 1) {
           const report = projectReports[0];
           if (report.current) {
             // Add fallback notice if applicable
-            if (report.baselineUsedFallback && report.baselineLatestCommitHash) {
-              await summary.addRaw(`> ⚠️ **Note:** The latest commit (\`${report.baselineLatestCommitHash}\`) does not have baseline artifacts. Using commit \`${report.baselineCommitHash}\` for baseline comparison instead. If this seems incorrect, please wait a few minutes and try rerunning the workflow.\n\n`);
+            if (
+              report.baselineUsedFallback &&
+              report.baselineLatestCommitHash
+            ) {
+              await summary.addRaw(
+                `> ⚠️ **Note:** The latest commit (\`${report.baselineLatestCommitHash}\`) does not have baseline artifacts. Using commit \`${report.baselineCommitHash}\` for baseline comparison instead. If this seems incorrect, please wait a few minutes and try rerunning the workflow.\n\n`,
+              );
             }
-            await generateBundleAnalysisReport(report.current, report.baseline || undefined, true, report.baselineCommitHash, report.baselinePRs);
+            await generateBundleAnalysisReport(
+              report.current,
+              report.baseline || undefined,
+              true,
+              report.baselineCommitHash,
+              report.baselinePRs,
+            );
           }
         } else {
           await summary.addHeading('📦 Monorepo Bundle Analysis', 2);
-          
+
           // Add fallback notice if applicable (check first report)
-          const firstReport = projectReports.find(r => r.current);
-          if (firstReport?.baselineUsedFallback && firstReport?.baselineLatestCommitHash) {
-            await summary.addRaw(`> ⚠️ **Note:** The latest commit (\`${firstReport.baselineLatestCommitHash}\`) does not have baseline artifacts. Using commit \`${firstReport.baselineCommitHash}\` for baseline comparison instead. If this seems incorrect, please wait a few minutes and try rerunning the workflow.\n\n`);
+          const firstReport = projectReports.find((r) => r.current);
+          if (
+            firstReport?.baselineUsedFallback &&
+            firstReport?.baselineLatestCommitHash
+          ) {
+            await summary.addRaw(
+              `> ⚠️ **Note:** The latest commit (\`${firstReport.baselineLatestCommitHash}\`) does not have baseline artifacts. Using commit \`${firstReport.baselineCommitHash}\` for baseline comparison instead. If this seems incorrect, please wait a few minutes and try rerunning the workflow.\n\n`,
+            );
           }
-          
+
           for (const report of projectReports) {
             if (!report.current) continue;
-            
+
             await summary.addHeading(`📁 ${report.projectName}`, 3);
             await summary.addRaw(`**Path:** \`${report.filePath}\`\n\n`);
 
-            await generateBundleAnalysisReport(report.current, report.baseline || undefined, false, report.baselineCommitHash, report.baselinePRs);
+            await generateBundleAnalysisReport(
+              report.current,
+              report.baseline || undefined,
+              false,
+              report.baselineCommitHash,
+              report.baselinePRs,
+            );
           }
-          
+
           await summary.write();
         }
       }
     }
-    
+
     // Generate combined PR comment for all projects
     if (isPR && projectReports.length > 0) {
       const { context } = require('@actions/github');
-      
+
       let commentBody = '## Rsdoctor Bundle Diff Analysis\n\n';
-      
+
       // Add fallback notice if applicable (check first report)
-      const firstReport = projectReports.find(r => r.current);
-      if (firstReport?.baselineUsedFallback && firstReport?.baselineLatestCommitHash) {
+      const firstReport = projectReports.find((r) => r.current);
+      if (
+        firstReport?.baselineUsedFallback &&
+        firstReport?.baselineLatestCommitHash
+      ) {
         commentBody += `> ⚠️ **Note:** The latest commit (\`${firstReport.baselineLatestCommitHash}\`) does not have baseline artifacts. Using commit \`${firstReport.baselineCommitHash}\` for baseline comparison instead. If this seems incorrect, please wait a few minutes and try rerunning the workflow.\n\n`;
       }
-      
+
       // Generate summary (always visible)
-      const reportsWithCurrent = projectReports.filter(r => r.current);
+      const reportsWithCurrent = projectReports.filter((r) => r.current);
       if (reportsWithCurrent.length > 1) {
         // Count projects with changes
         let projectsWithChanges = 0;
@@ -521,13 +661,13 @@ async function processSingleFile(
             projectsWithChanges++;
           }
         }
-        
+
         const totalProjects = reportsWithCurrent.length;
         const projectWord = totalProjects === 1 ? 'project' : 'projects';
         const changeWord = projectsWithChanges === 1 ? 'project' : 'projects';
         commentBody += `Found ${totalProjects} ${projectWord} in monorepo, ${projectsWithChanges} ${changeWord} with changes.\n\n`;
       }
-      
+
       // Generate summary table for quick overview
       if (reportsWithCurrent.length > 0) {
         // Check if any project has changes (any non-zero change)
@@ -539,63 +679,76 @@ async function processSingleFile(
             break;
           }
         }
-        
+
         // Use 'open' attribute if there are changes, otherwise keep it collapsed
         const detailsTag = hasChanges ? '<details open>\n' : '<details>\n';
         commentBody += `${detailsTag}<summary><b>📊 Quick Summary</b></summary>\n\n`;
-        commentBody += '| Project | Total Size | Gzip Size | Change | Gzip Change |\n';
-        commentBody += '|---------|------------|-----------|--------|-------------|\n';
-        
+        commentBody +=
+          '| Project | Total Size | Gzip Size | Change | Gzip Change |\n';
+        commentBody +=
+          '|---------|------------|-----------|--------|-------------|\n';
+
         for (const report of reportsWithCurrent) {
           if (!report.current) continue;
           const currentSize = report.current.totalSize;
           const baselineSize = report.baseline?.totalSize || 0;
-          const diff = report.baseline ? calculateDiff(currentSize, baselineSize) : { value: '-', emoji: '' };
+          const diff = report.baseline
+            ? calculateDiff(currentSize, baselineSize)
+            : { value: '-', emoji: '' };
           const sizeStr = formatBytes(currentSize);
           const gzipDiff = calculateGzipDiff(report.current, report.baseline);
           commentBody += `| ${report.projectName} | ${sizeStr} | ${formatGzipSize(report.current)} | ${diff.emoji} ${diff.value} | ${gzipDiff.emoji} ${gzipDiff.value} |\n`;
         }
-        
+
         commentBody += '\n</details>\n\n';
       }
-      
+
       // Helper function to check if a report has significant changes
 
       const hasSignificantChanges = (report: ProjectReport): boolean => {
         if (!report.current) return false;
         return hasBundleAnalysisChange(report.current, report.baseline);
       };
-      
+
       // Filter reports with changes
-      const reportsWithChanges = projectReports.filter(report => {
+      const reportsWithChanges = projectReports.filter((report) => {
         if (!report.current) return false;
         return hasSignificantChanges(report);
       });
-      
+
       // Generate detailed reports only for projects with changes
       if (reportsWithChanges.length > 0) {
         // Only add collapse wrapper if there are multiple reports with changes
-          commentBody += '<details>\n<summary><b>📋 Detailed Reports</b> (Click to expand)</summary>\n\n';
-        
+        commentBody +=
+          '<details>\n<summary><b>📋 Detailed Reports</b> (Click to expand)</summary>\n\n';
+
         for (const report of reportsWithChanges) {
-          commentBody += generateProjectMarkdown(report.projectName, report.filePath, report.current!, report.baseline || undefined, report.baselineCommitHash, report.baselinePRs);
-          
+          commentBody += generateProjectMarkdown(
+            report.projectName,
+            report.filePath,
+            report.current!,
+            report.baseline || undefined,
+            report.baselineCommitHash,
+            report.baselinePRs,
+          );
+
           // Add diff HTML link if available
           if (report.diffHtmlArtifactId) {
             const artifactDownloadLink = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}/artifacts/${report.diffHtmlArtifactId}`;
             commentBody += `\n📦 **Download Diff Report**: [${report.projectName} Bundle Diff](${artifactDownloadLink})\n\n`;
           }
         }
-        
+
         if (reportsWithChanges.length > 1) {
           commentBody += '</details>\n\n';
         }
       }
-      
+
       // Append AI degradation analysis if available (one section per project that has it)
-      const reportsWithAI = projectReports.filter(r => r.aiAnalysis);
+      const reportsWithAI = projectReports.filter((r) => r.aiAnalysis);
       if (reportsWithAI.length > 0) {
-        commentBody += '<details>\n<summary><b>🤖 AI Degradation Analysis</b> (Click to expand)</summary>\n\n';
+        commentBody +=
+          '<details>\n<summary><b>🤖 AI Degradation Analysis</b> (Click to expand)</summary>\n\n';
         for (const report of reportsWithAI) {
           if (!report.aiAnalysis) continue;
           if (reportsWithAI.length > 1) {
@@ -607,25 +760,27 @@ async function processSingleFile(
         commentBody += '</details>\n\n';
       }
 
-      commentBody += '*Generated by [Rsdoctor GitHub Action](https://rsdoctor.rs/guide/start/action)*';
-      
+      commentBody +=
+        '*Generated by [Rsdoctor GitHub Action](https://rsdoctor.rs/guide/start/action)*';
+
       try {
         await githubService.updateOrCreateComment(
           context.payload.pull_request.number,
-          commentBody
+          commentBody,
         );
         console.log('✅ Added/updated bundle diff comment to PR');
       } catch (commentError) {
         console.warn(`⚠️ Failed to add/update comment to PR: ${commentError}`);
       }
     }
-    
+
     if (!isPush && !isPR && !isDispatch) {
-      console.log('ℹ️ Skipping artifact operations - this action only runs on push events (to target branch), pull requests, and workflow_dispatch');
+      console.log(
+        'ℹ️ Skipping artifact operations - this action only runs on push events (to target branch), pull requests, and workflow_dispatch',
+      );
       console.log('Current event:', process.env.GITHUB_EVENT_NAME);
       return;
     }
-
   } catch (error) {
     if (error instanceof Error) {
       setFailed(error.message);

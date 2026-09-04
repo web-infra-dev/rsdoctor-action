@@ -1,4 +1,4 @@
-import { rstest } from "@rstest/core";
+import { rstest } from 'rstack/test';
 
 // Save original console methods
 const originalConsole = {

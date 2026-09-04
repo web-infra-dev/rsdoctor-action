@@ -1,5 +1,12 @@
 import * as path from 'path';
-import { expect, describe, afterEach, beforeEach, it, rstest } from '@rstest/core';
+import {
+  expect,
+  describe,
+  afterEach,
+  beforeEach,
+  it,
+  rstest,
+} from 'rstack/test';
 const mockFs = require('mock-fs');
 import { GitHubService } from '../github';
 import { uploadArtifact } from '../upload';
@@ -8,7 +15,10 @@ import { mockConsole } from './mock-console';
 
 describe('Integration Tests', () => {
   const mockCommitHash = 'abc1234567';
-  const mockFilePath = path.join(process.cwd(), 'dist/.rsdoctor/rsdoctor-data.json');
+  const mockFilePath = path.join(
+    process.cwd(),
+    'dist/.rsdoctor/rsdoctor-data.json',
+  );
   const mockRsdoctorData = {
     data: {
       chunkGraph: {
@@ -79,18 +89,22 @@ describe('Integration Tests', () => {
 
     it('should handle the complete artifact workflow', async () => {
       // Mock GitHub API responses
-      rstest.spyOn(githubService, 'getTargetBranchLatestCommit')
+      rstest
+        .spyOn(githubService, 'getTargetBranchLatestCommit')
         .mockResolvedValue('test-commit-hash');
-      
-      rstest.spyOn(githubService, 'findArtifactByNamePattern')
+
+      rstest
+        .spyOn(githubService, 'findArtifactByNamePattern')
         .mockResolvedValue({ id: 1, name: 'test-artifact' });
 
       // 1. Get target branch commit
-      const targetCommitHash = await githubService.getTargetBranchLatestCommit();
+      const targetCommitHash =
+        await githubService.getTargetBranchLatestCommit();
       expect(targetCommitHash).toBe('test-commit-hash');
 
       // 2. Find and download artifact
-      const artifact = await githubService.findArtifactByNamePattern('rsdoctor-data');
+      const artifact =
+        await githubService.findArtifactByNamePattern('rsdoctor-data');
       expect(artifact).toBeDefined();
       expect(artifact.id).toBe(1);
 
@@ -116,4 +130,3 @@ describe('Integration Tests', () => {
     });
   });
 });
-

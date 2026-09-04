@@ -16,7 +16,7 @@ on:
 
 jobs:
   Build:
-    runs-on: ubuntu-latest    
+    runs-on: ubuntu-latest
 
     permissions:
       # Allow commenting on commits
@@ -25,7 +25,7 @@ jobs:
       issues: write
       # Allow commenting on pull requests
       pull-requests: write
-      
+
     steps:
       - name: Checkout
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4
@@ -57,14 +57,14 @@ jobs:
           pnpm install --ignore-scripts
           pnpm run build
 
-      - name: Run Lint
+      - name: Run Checks
         run: |
-          pnpm run lint
+          pnpm run check
 
       - name: Run Tests
         run: |
           pnpm run test
-          
+
       - name: Build Demo Project
         run: |
           cd examples/rsbuild-demo
@@ -72,7 +72,7 @@ jobs:
           pnpm run build
           cd ../rsbuild-demo2
           pnpm run build
-          
+
       - name: Report Compressed Size
         uses: ./
         env:

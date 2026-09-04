@@ -2,62 +2,64 @@
   "name": "@rsdoctor/actions",
   "version": "0.0.1-beta.0",
   "description": "An Rsdoctor gitHub action for bundle size analysis and reporting",
-  "main": "./dist/index.js",
-  "scripts": {
-    "build": "rslib build && node scripts/copy-rsdoctor-client.mjs",
-    "diff": "npx rsdoctor bundle-diff --html --baseline=examples/rsbuild-demo/dist/.rsdoctor/rsdoctor-data.json --current=examples/rsbuild-demo/dist/.rsdoctor/rsdoctor-data.json",
-    "lint": "rslint",
-    "lint:fix": "rslint --fix",
-    "test": "rstest",
-    "test:watch": "rstest --watch",
-    "test:coverage": "rstest --coverage",
-    "test:e2e": "playwright test"
-  },
-  "files": [
-    "dist",
-    "action.yml",
-    "README.md"
-  ],
   "keywords": [
     "github-action",
     "bundle-size",
     "performance",
     "analysis"
   ],
-  "author": "yifancong",
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/web-infra-dev/rsdoctor-action.git"
-  },
   "homepage": "https://github.com/web-infra-dev/rsdoctor-action#readme",
   "bugs": {
     "url": "https://github.com/web-infra-dev/rsdoctor-action/issues"
   },
-  "publishConfig": {
-    "access": "public"
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/web-infra-dev/rsdoctor-action.git"
+  },
+  "license": "MIT",
+  "author": "yifancong",
+  "main": "./dist/index.js",
+  "files": [
+    "dist",
+    "action.yml",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "rs lib && node scripts/copy-rsdoctor-client.mjs",
+    "check": "rs check",
+    "diff": "npx rsdoctor bundle-diff --html --baseline=examples/rsbuild-demo/dist/.rsdoctor/rsdoctor-data.json --current=examples/rsbuild-demo/dist/.rsdoctor/rsdoctor-data.json",
+    "format": "rs fmt",
+    "lint": "rs lint",
+    "lint:fix": "rs lint --fix",
+    "prepare": "rs hooks",
+    "test": "rs test",
+    "test:coverage": "rs test --coverage",
+    "test:e2e": "playwright test",
+    "test:watch": "rs test --watch"
   },
   "devDependencies": {
+    "@actions/artifact": "^2.3.2",
+    "@actions/core": "^1.2.6",
+    "@actions/github": "^4.0.0",
     "@ai-sdk/anthropic": "^3.0.69",
     "@ai-sdk/deepseek": "^2.0.29",
     "@ai-sdk/google": "^3.0.63",
     "@ai-sdk/openai": "^3.0.52",
-    "ai": "^6.0.159",
-    "@actions/artifact": "^2.3.2",
-    "@actions/core": "^1.2.6",
-    "@actions/github": "^4.0.0",
     "@playwright/test": "^1.42.1",
     "@rsdoctor/cli": "1.5.12",
     "@rsdoctor/client": "1.5.12",
-    "@rslib/core": "^0.22.0",
-    "@rslint/core": "^0.5.1",
-    "@rstest/core": "^0.11.9",
+    "@rstest/coverage-istanbul": "~0.11.11",
     "@types/node": "^24.5.2",
     "@types/node-fetch": "^2.6.11",
     "@types/yauzl": "^2.10.3",
+    "ai": "^6.0.159",
     "fast-glob": "^3.3.3",
     "mock-fs": "^5.2.0",
     "nock": "^13.5.4",
+    "rstack": "^0.7.2",
     "yauzl": "^3.2.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

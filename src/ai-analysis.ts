@@ -23,7 +23,11 @@ function detectProvider(model: string): Provider {
   return 'openai';
 }
 
-function createModel(provider: Provider, model: string, token: string): LanguageModel {
+function createModel(
+  provider: Provider,
+  model: string,
+  token: string,
+): LanguageModel {
   switch (provider) {
     case 'anthropic': {
       const anthropic = createAnthropic({ apiKey: token });
@@ -69,7 +73,9 @@ export async function analyzeWithAI(
   }
 
   if (!fs.existsSync(diffJsonPath)) {
-    console.log(`⚠️  Bundle diff JSON not found at ${diffJsonPath}, skipping AI analysis`);
+    console.log(
+      `⚠️  Bundle diff JSON not found at ${diffJsonPath}, skipping AI analysis`,
+    );
     return null;
   }
 

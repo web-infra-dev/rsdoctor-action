@@ -1,4 +1,4 @@
-import { describe, beforeEach, afterAll, it, expect } from '@rstest/core';
+import { describe, beforeEach, afterAll, it, expect } from 'rstack/test';
 import { getInput } from '@actions/core';
 import { GitHubService } from '../github';
 const nock = require('nock');
@@ -29,9 +29,7 @@ describe('GitHub Service', () => {
     });
 
     it('should use the repository default branch when not configured', async () => {
-      (getInput as any)
-        .mockReturnValueOnce('')
-        .mockReturnValueOnce('');
+      (getInput as any).mockReturnValueOnce('').mockReturnValueOnce('');
 
       nock('https://api.github.com')
         .get('/repos/web-infra-dev/rsdoctor-action')
@@ -42,9 +40,7 @@ describe('GitHub Service', () => {
     });
 
     it('should fall back to main when the repository query fails', async () => {
-      (getInput as any)
-        .mockReturnValueOnce('')
-        .mockReturnValueOnce('');
+      (getInput as any).mockReturnValueOnce('').mockReturnValueOnce('');
 
       nock('https://api.github.com')
         .get('/repos/web-infra-dev/rsdoctor-action')
@@ -69,7 +65,12 @@ describe('GitHub Service', () => {
       // Mock workflow runs check (no artifacts found)
       nock('https://api.github.com')
         .get('/repos/web-infra-dev/rsdoctor-action/actions/runs')
-        .query({ branch: 'main', head_sha: mockCommitSha, status: 'completed', per_page: 30 })
+        .query({
+          branch: 'main',
+          head_sha: mockCommitSha,
+          status: 'completed',
+          per_page: 30,
+        })
         .reply(200, {
           workflow_runs: [],
         });
@@ -111,7 +112,12 @@ describe('GitHub Service', () => {
       // Mock workflow runs check for latest commit (no artifacts)
       nock('https://api.github.com')
         .get('/repos/web-infra-dev/rsdoctor-action/actions/runs')
-        .query({ branch: 'main', head_sha: mockCommitSha, status: 'completed', per_page: 30 })
+        .query({
+          branch: 'main',
+          head_sha: mockCommitSha,
+          status: 'completed',
+          per_page: 30,
+        })
         .reply(200, {
           workflow_runs: [],
         });
@@ -129,15 +135,18 @@ describe('GitHub Service', () => {
         .get(`/repos/web-infra-dev/rsdoctor-action/commits/${mockCommitSha}`)
         .reply(200, {
           sha: mockCommitSha,
-          parents: [
-            { sha: mockParentSha },
-          ],
+          parents: [{ sha: mockParentSha }],
         });
 
       // Mock workflow runs check for parent commit (has artifacts)
       nock('https://api.github.com')
         .get('/repos/web-infra-dev/rsdoctor-action/actions/runs')
-        .query({ branch: 'main', head_sha: mockParentSha, status: 'completed', per_page: 30 })
+        .query({
+          branch: 'main',
+          head_sha: mockParentSha,
+          status: 'completed',
+          per_page: 30,
+        })
         .reply(200, {
           workflow_runs: [
             {
@@ -154,9 +163,7 @@ describe('GitHub Service', () => {
       nock('https://api.github.com')
         .get('/repos/web-infra-dev/rsdoctor-action/actions/runs/123/artifacts')
         .reply(200, {
-          artifacts: [
-            { id: 1, name: 'test-artifact' },
-          ],
+          artifacts: [{ id: 1, name: 'test-artifact' }],
         });
 
       const result = await githubService.getTargetBranchLatestCommit();
@@ -173,9 +180,9 @@ describe('GitHub Service', () => {
         .get('/repos/web-infra-dev/rsdoctor-action/branches/main')
         .reply(404, { message: 'Branch not found' });
 
-      await expect(githubService.getTargetBranchLatestCommit())
-        .rejects
-        .toThrow('Failed to get target branch (main) commit: Branch not found');
+      await expect(githubService.getTargetBranchLatestCommit()).rejects.toThrow(
+        'Failed to get target branch (main) commit: Branch not found',
+      );
     });
 
     it('should use the full SHA when querying workflow runs for baseline artifacts', async () => {
@@ -190,7 +197,12 @@ describe('GitHub Service', () => {
 
       nock('https://api.github.com')
         .get('/repos/web-infra-dev/rsdoctor-action/actions/runs')
-        .query({ branch: 'main', head_sha: mockCommitSha, status: 'completed', per_page: 30 })
+        .query({
+          branch: 'main',
+          head_sha: mockCommitSha,
+          status: 'completed',
+          per_page: 30,
+        })
         .reply(200, {
           workflow_runs: [
             {
@@ -206,9 +218,7 @@ describe('GitHub Service', () => {
       nock('https://api.github.com')
         .get('/repos/web-infra-dev/rsdoctor-action/actions/runs/456/artifacts')
         .reply(200, {
-          artifacts: [
-            { id: 1, name: 'rsdoctor-artifact' },
-          ],
+          artifacts: [{ id: 1, name: 'rsdoctor-artifact' }],
         });
 
       const result = await githubService.getTargetBranchLatestCommit();
@@ -223,7 +233,12 @@ describe('GitHub Service', () => {
 
       nock('https://api.github.com')
         .get('/repos/web-infra-dev/rsdoctor-action/actions/runs')
-        .query({ branch: 'main', head_sha: fullSha, status: 'completed', per_page: 10 })
+        .query({
+          branch: 'main',
+          head_sha: fullSha,
+          status: 'completed',
+          per_page: 10,
+        })
         .reply(200, {
           workflow_runs: [
             {
@@ -234,7 +249,11 @@ describe('GitHub Service', () => {
           ],
         });
 
-      const run = await githubService.findWorkflowRunByCommit(fullSha, 'completed', 'main');
+      const run = await githubService.findWorkflowRunByCommit(
+        fullSha,
+        'completed',
+        'main',
+      );
       expect(run.id).toBe(456);
     });
   });
@@ -245,7 +264,12 @@ describe('GitHub Service', () => {
 
       nock('https://api.github.com')
         .get('/repos/web-infra-dev/rsdoctor-action/actions/runs')
-        .query({ branch: 'main', head_sha: fullSha, status: 'completed', per_page: 30 })
+        .query({
+          branch: 'main',
+          head_sha: fullSha,
+          status: 'completed',
+          per_page: 30,
+        })
         .reply(200, {
           workflow_runs: [],
         });
@@ -263,7 +287,11 @@ describe('GitHub Service', () => {
           ],
         });
 
-      const runs = await githubService.findAllWorkflowRunsByCommit(fullSha, 'completed', 'main');
+      const runs = await githubService.findAllWorkflowRunsByCommit(
+        fullSha,
+        'completed',
+        'main',
+      );
       expect(runs).toHaveLength(1);
       expect(runs[0].id).toBe(789);
     });

@@ -1,4 +1,4 @@
-import { rstest } from "@rstest/core";
+import { rstest } from 'rstack/test';
 
 // Mock GitHub Actions environment variables
 process.env.GITHUB_REPOSITORY = 'web-infra-dev/rsdoctor-action';
@@ -36,7 +36,8 @@ rstest.mock('@actions/core', () => ({
 rstest.mock('@actions/artifact', () => ({
   DefaultArtifactClient: class {
     uploadArtifact = rstest.fn().mockResolvedValue({ id: 1 });
-    downloadArtifact = rstest.fn().mockResolvedValue({ downloadPath: '/tmp/artifacts' });
-  }
+    downloadArtifact = rstest
+      .fn()
+      .mockResolvedValue({ downloadPath: '/tmp/artifacts' });
+  },
 }));
-

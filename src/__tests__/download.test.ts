@@ -1,6 +1,9 @@
 import * as path from 'path';
-import { afterEach, beforeEach, describe, expect, it } from '@rstest/core';
-import { downloadArtifactByCommitHash, readArtifactFileFromZip } from '../download';
+import { afterEach, beforeEach, describe, expect, it } from 'rstack/test';
+import {
+  downloadArtifactByCommitHash,
+  readArtifactFileFromZip,
+} from '../download';
 import { createArtifactName, hashPath } from '../upload';
 import { mockConsole, restoreConsole } from './mock-console';
 const nock = require('nock');
@@ -49,7 +52,9 @@ describe('Download Module', () => {
       });
 
     nock('https://api.github.com')
-      .get(`/repos/web-infra-dev/rsdoctor-action/actions/runs/${workflowRunId}/artifacts`)
+      .get(
+        `/repos/web-infra-dev/rsdoctor-action/actions/runs/${workflowRunId}/artifacts`,
+      )
       .reply(200, {
         artifacts: [
           {
@@ -62,7 +67,9 @@ describe('Download Module', () => {
       });
 
     return nock('https://api.github.com')
-      .get(`/repos/web-infra-dev/rsdoctor-action/actions/artifacts/${artifactId}/zip`)
+      .get(
+        `/repos/web-infra-dev/rsdoctor-action/actions/artifacts/${artifactId}/zip`,
+      )
       .reply(200, Buffer.from('not a zip'));
   }
 
@@ -80,9 +87,9 @@ describe('Download Module', () => {
   });
 
   it('should reject when the target entry does not exist', async () => {
-    await expect(readArtifactFileFromZip(artifactZip, 'missing.json')).rejects.toThrow(
-      'Target file missing.json not found in artifact',
-    );
+    await expect(
+      readArtifactFileFromZip(artifactZip, 'missing.json'),
+    ).rejects.toThrow('Target file missing.json not found in artifact');
   });
 
   it('should reject instead of exiting silently when ZIP opening stalls', async () => {
@@ -96,25 +103,37 @@ describe('Download Module', () => {
     const artifactName = createArtifactName(pathHash, shortCommitHash);
     const downloadScope = mockArtifactSearch(artifactName, 101);
 
-    await expect(downloadArtifactByCommitHash(commitHash, fileName, filePath)).rejects.toThrow();
+    await expect(
+      downloadArtifactByCommitHash(commitHash, fileName, filePath),
+    ).rejects.toThrow();
 
     expect(downloadScope.isDone()).toBe(true);
   });
 
   it('should find artifacts that use the legacy unprefixed name', async () => {
     const pathHash = getPathHash();
-    const downloadScope = mockArtifactSearch(`${pathHash}-${shortCommitHash}`, 202);
+    const downloadScope = mockArtifactSearch(
+      `${pathHash}-${shortCommitHash}`,
+      202,
+    );
 
-    await expect(downloadArtifactByCommitHash(commitHash, fileName, filePath)).rejects.toThrow();
+    await expect(
+      downloadArtifactByCommitHash(commitHash, fileName, filePath),
+    ).rejects.toThrow();
 
     expect(downloadScope.isDone()).toBe(true);
   });
 
   it('should find artifacts that use the legacy unprefixed name with extension', async () => {
     const pathHash = getPathHash();
-    const downloadScope = mockArtifactSearch(`${pathHash}-${shortCommitHash}.json`, 303);
+    const downloadScope = mockArtifactSearch(
+      `${pathHash}-${shortCommitHash}.json`,
+      303,
+    );
 
-    await expect(downloadArtifactByCommitHash(commitHash, fileName, filePath)).rejects.toThrow();
+    await expect(
+      downloadArtifactByCommitHash(commitHash, fileName, filePath),
+    ).rejects.toThrow();
 
     expect(downloadScope.isDone()).toBe(true);
   });
@@ -124,7 +143,9 @@ describe('Download Module', () => {
     const artifactName = createArtifactName(pathHash, commitHash);
     const downloadScope = mockArtifactSearch(artifactName, 404);
 
-    await expect(downloadArtifactByCommitHash(commitHash, fileName, filePath)).rejects.toThrow();
+    await expect(
+      downloadArtifactByCommitHash(commitHash, fileName, filePath),
+    ).rejects.toThrow();
 
     expect(downloadScope.isDone()).toBe(true);
   });

@@ -5,12 +5,18 @@ import { createHash } from 'crypto';
 
 export const ARTIFACT_NAME_PREFIX = 'rsdoctor';
 
-export function hashPath(pathParts: string[], fileNameWithoutExt: string): string {
+export function hashPath(
+  pathParts: string[],
+  fileNameWithoutExt: string,
+): string {
   const pathString = `${pathParts.join('-')}-${fileNameWithoutExt}`;
   return createHash('sha256').update(pathString).digest('hex').substring(0, 8);
 }
 
-export function createArtifactName(pathHash: string, commitHash: string): string {
+export function createArtifactName(
+  pathHash: string,
+  commitHash: string,
+): string {
   return `${ARTIFACT_NAME_PREFIX}-${pathHash}-${commitHash}`;
 }
 
@@ -19,7 +25,9 @@ export function createArtifactName(pathHash: string, commitHash: string): string
  * allowing callers to use the full SHA required by GitHub API filters.
  */
 export function formatArtifactCommitHash(commitHash: string): string {
-  return /^[0-9a-f]{40}$/i.test(commitHash) ? commitHash.substring(0, 10) : commitHash;
+  return /^[0-9a-f]{40}$/i.test(commitHash)
+    ? commitHash.substring(0, 10)
+    : commitHash;
 }
 
 export async function uploadArtifact(filePath: string, commitHash?: string) {
@@ -29,7 +37,8 @@ export async function uploadArtifact(filePath: string, commitHash?: string) {
   const artifactClient = new DefaultArtifactClient();
 
   const hash = formatArtifactCommitHash(
-    commitHash || execSync('git rev-parse --short=10 HEAD', { encoding: 'utf8' }).trim(),
+    commitHash ||
+      execSync('git rev-parse --short=10 HEAD', { encoding: 'utf8' }).trim(),
   );
 
   const targetFilePath = filePath;
@@ -45,15 +54,15 @@ export async function uploadArtifact(filePath: string, commitHash?: string) {
 
   const pathHash = hashPath(pathParts, fileNameWithoutExt);
   const artifactName = createArtifactName(pathHash, hash);
-  
+
   console.log(`Uploading artifact: ${artifactName}`);
   console.log(`From file: ${targetFilePath}`);
-  
+
   const uploadResponse = await artifactClient.uploadArtifact(
     artifactName,
     [targetFilePath],
     path.dirname(targetFilePath),
   );
-  
+
   return uploadResponse;
 }
