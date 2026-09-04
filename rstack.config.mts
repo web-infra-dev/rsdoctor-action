@@ -1,6 +1,7 @@
-import { defineConfig } from '@rslib/core';
+// Configuration guide: https://rstack.rs/config
+import { define } from 'rstack';
 
-export default defineConfig({
+define.lib({
   lib: [
     {
       bundle: true,
@@ -60,4 +61,52 @@ export default defineConfig({
       },
     },
   ],
+});
+
+define.test({
+  // Keep unit tests independent of the production bundle configuration.
+  extends: {},
+  testEnvironment: 'node',
+  include: ['src/**/__tests__/**/*.test.ts'],
+  setupFiles: ['./src/__tests__/setup.ts'],
+  coverage: {
+    include: ['src/**/*.ts'],
+    exclude: ['src/**/*.d.ts', 'src/**/__tests__/**'],
+    thresholds: {
+      branches: 80,
+      functions: 80,
+      lines: 80,
+      statements: 80,
+    },
+  },
+});
+
+define.lint(({ js, ts }) => [
+  {
+    ignores: ['dist/**', 'examples/**'],
+  },
+  js.configs.recommended,
+  ts.configs.recommended,
+  {
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+      '@typescript-eslint/no-require-imports': 'off',
+      '@typescript-eslint/no-unused-vars': 'off',
+      'prefer-const': 'off',
+      // Preserve the lint baseline before upgrading Rslint.
+      'no-useless-assignment': 'off',
+      'preserve-caught-error': 'off',
+    },
+  },
+]);
+
+define.fmt({
+  singleQuote: true,
+  sortPackageJson: true,
+  ignorePatterns: ['dist/**', 'examples/**'],
+});
+
+define.staged({
+  '*.{js,jsx,ts,tsx,mjs,cjs,mts,cts}': ['rs lint', 'rs fmt'],
+  '*.{json,md,mdx,css,scss,less,html,yml,yaml}': 'rs fmt',
 });

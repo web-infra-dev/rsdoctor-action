@@ -31,12 +31,12 @@ export default defineConfig({
             mode: 'brief',
             options: {
               type: ['json'],
-            }
-          }
+            },
+          },
         }),
       ],
     },
-  }
+  },
 });
 ```
 
@@ -47,7 +47,7 @@ export default defineConfig({
   with:
     # Path to Rsdoctor JSON data file (relative to project root)
     file_path: 'dist/.rsdoctor/rsdoctor-data.json'
-    
+
     # Target branch for comparison (defaults to the repository default branch). If you prefer a dynamic
     # target based on the PR's base branch (instead of always using main), you can use:
     # target_branch: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref || github.event.repository.default_branch }}
@@ -58,12 +58,12 @@ export default defineConfig({
 
 ### Input Parameters
 
-| Parameter | Description | Required | Default |
-|-----------|-------------|----------|---------|
-| `file_path` | Path to Rsdoctor JSON data file | Yes | - |
-| `target_branch` | Target branch for baseline comparison | No | Repository default branch |
-| `enable_ai_analysis` | Enable AI-assisted degradation analysis | No | `true` |
-| `ai_model` | Model used when AI analysis is enabled | No | `claude-3-5-haiku-latest` |
+| Parameter            | Description                             | Required | Default                   |
+| -------------------- | --------------------------------------- | -------- | ------------------------- |
+| `file_path`          | Path to Rsdoctor JSON data file         | Yes      | -                         |
+| `target_branch`      | Target branch for baseline comparison   | No       | Repository default branch |
+| `enable_ai_analysis` | Enable AI-assisted degradation analysis | No       | `true`                    |
+| `ai_model`           | Model used when AI analysis is enabled  | No       | `claude-3-5-haiku-latest` |
 
 > AI-assisted analysis is enabled by default when `AI_TOKEN` is provided. Set `enable_ai_analysis: false` to disable it explicitly.
 
@@ -93,8 +93,8 @@ on:
     types: [opened, synchronize, reopened]
   push:
     branches:
-      - main  # or your target branch name
-  workflow_dispatch:  # Allow manual triggering
+      - main # or your target branch name
+  workflow_dispatch: # Allow manual triggering
 
 jobs:
   bundle-analysis:
@@ -135,10 +135,10 @@ jobs:
         run: |
           pnpm install
           pnpm run build
-      
+
       - name: Build with Rsdoctor
         run: npm run build
-      
+
       - name: Bundle Analysis
         uses: web-infra-dev/rsdoctor-action@main
         env:
@@ -179,16 +179,16 @@ This action works with any build tool that supports Rsdoctor:
 ### Common Issues
 
 **Q: Action fails with "Rsdoctor data file not found"**
+
 - Ensure your build process generates Rsdoctor JSON data
 - Check that the `file_path` points to the correct location
 - Verify Rsdoctor plugin is properly configured in your build tool
 
 **Q: No baseline data found**
+
 - This is normal for the first run or new repositories
 - The action will still generate current bundle analysis
 - Baseline data will be created after the first merge to main branch
-
-
 
 ## Contributing
 
@@ -212,9 +212,20 @@ We're actively working on enhancing the Rsdoctor Action with the following plann
 
 ## Development
 
+Use Node.js 22 (22.18 or later), or Node.js 24.3 or later, with pnpm. The action project uses [Rstack CLI](https://rstack.rs/) for builds, tests, linting, formatting, and Git hooks. The example projects keep their standalone Rsbuild setup.
+
 ```bash
 # Install dependencies
 pnpm install
+
+# Check lint and formatting
+pnpm run check
+
+# Format files
+pnpm run format
+
+# Run unit tests
+pnpm run test
 
 # Build the action
 pnpm run build
@@ -224,3 +235,5 @@ cd examples/rsbuild-demo
 pnpm install
 pnpm run build
 ```
+
+The `prepare` script installs Git hooks with `rs hooks`. The pre-commit hook runs `rs staged` to lint and format staged files in the main project, excluding the examples.

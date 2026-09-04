@@ -33,12 +33,12 @@ export default defineConfig({
             mode: 'brief',
             options: {
               type: ['json'],
-            }
-          }
+            },
+          },
         }),
       ],
     },
-  }
+  },
 });
 ```
 
@@ -49,17 +49,17 @@ export default defineConfig({
   with:
     # Rsdoctor JSON 数据文件路径（相对于项目根目录）
     file_path: 'dist/.rsdoctor/rsdoctor-data.json'
-    
+
     # 用于比较的目标分支（默认为仓库的默认分支），如果想使用动态目标分支，可以使用 `target_branch: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref || github.event.repository.default_branch }}`
-    target_branch: 'main' 
+    target_branch: 'main'
 ```
 
 #### 输入参数
 
-| 参数 | 描述 | 必需 | 默认值 |
-|------|------|------|--------|
-| `file_path` | Rsdoctor JSON 数据文件路径 | 是 | - |
-| `target_branch` | 用于基线比较的目标分支 | 否 | 仓库默认分支 |
+| 参数            | 描述                       | 必需 | 默认值       |
+| --------------- | -------------------------- | ---- | ------------ |
+| `file_path`     | Rsdoctor JSON 数据文件路径 | 是   | -            |
+| `target_branch` | 用于基线比较的目标分支     | 否   | 仓库默认分支 |
 
 - `target_branch`: 如果想用动态目标分支，而不仅仅是主分支，则可以使用 `target_branch: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref || github.event.repository.default_branch }}`
 
@@ -74,7 +74,7 @@ on:
 
   push:
     branches:
-      - main  # or your target branch name
+      - main # or your target branch name
 
 jobs:
   bundle-analysis:
@@ -115,10 +115,10 @@ jobs:
         run: |
           pnpm install
           pnpm run build
-      
+
       - name: Build with Rsdoctor
         run: npm run build
-      
+
       - name: Bundle Analysis
         uses: web-infra-dev/rsdoctor-action@main
         with:
@@ -157,15 +157,16 @@ Action 生成多种格式的综合报告：
 ### 常见问题
 
 **Q: Action 失败，提示"未找到 Rsdoctor 数据文件"**
+
 - 确保您的构建过程生成 Rsdoctor JSON 数据
 - 检查 `file_path` 是否指向正确位置
 - 验证 Rsdoctor 插件在您的构建工具中正确配置
 
 **Q: 未找到基线数据**
+
 - 这对于首次运行或新仓库是正常的
 - Action 仍会生成当前打包分析
 - 基线数据将在首次合并到主分支后创建
-
 
 ## 下一步计划
 
@@ -192,12 +193,22 @@ MIT 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情。
 
 - **Monorepo 项目更好的支持**：通过添加工作区感知分析、多包打包跟踪以及单个仓库内不同包的聚合报告，改善对 monorepo 项目的支持。
 
-
 ## 开发
+
+使用 Node.js 22（22.18 及以上）或 Node.js 24.3 及以上版本，以及 pnpm。主项目通过 [Rstack CLI](https://rstack.rs/) 统一构建、测试、lint、格式化和 Git hooks。示例项目保留原有的独立 Rsbuild 配置。
 
 ```bash
 # 安装依赖
 pnpm install
+
+# 检查 lint 和格式
+pnpm run check
+
+# 格式化文件
+pnpm run format
+
+# 运行单元测试
+pnpm run test
 
 # 构建 Action
 pnpm run build
@@ -207,3 +218,5 @@ cd examples/rsbuild-demo
 pnpm install
 pnpm run build
 ```
+
+`prepare` 脚本通过 `rs hooks` 安装 Git hooks，pre-commit hook 调用 `rs staged` 检查并格式化主项目的暂存文件，不包含示例项目。

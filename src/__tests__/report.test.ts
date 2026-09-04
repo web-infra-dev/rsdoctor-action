@@ -5,7 +5,7 @@ import {
   generateProjectMarkdown,
   generateBundleAnalysisReport,
 } from '../report';
-import { describe, it, expect } from '@rstest/core';
+import { describe, it, expect } from 'rstack/test';
 
 describe('Report Module', () => {
   const fixturesPath = path.join(__dirname, 'fixtures');
@@ -46,17 +46,21 @@ describe('Report Module', () => {
   describe('generateProjectMarkdown', () => {
     const mockAnalysis = {
       totalSize: 1024 * 1024, // 1MB
-      jsSize: 512 * 1024,     // 512KB
-      cssSize: 256 * 1024,    // 256KB
-      htmlSize: 128 * 1024,   // 128KB
-      otherSize: 128 * 1024,  // 128KB
+      jsSize: 512 * 1024, // 512KB
+      cssSize: 256 * 1024, // 256KB
+      htmlSize: 128 * 1024, // 128KB
+      otherSize: 128 * 1024, // 128KB
       totalGzipSize: 384 * 1024, // 384KB
       assets: [],
       chunks: [],
     };
 
     it('should generate markdown without baseline', () => {
-      const markdown = generateProjectMarkdown('test-project', 'path/to/file.json', mockAnalysis);
+      const markdown = generateProjectMarkdown(
+        'test-project',
+        'path/to/file.json',
+        mockAnalysis,
+      );
       expect(markdown).toContain('### 📁 test-project');
       expect(markdown).toContain('**Path:** `path/to/file.json`');
       expect(markdown).toContain('1.0 MB');
@@ -72,7 +76,12 @@ describe('Report Module', () => {
         totalSize: 512 * 1024, // 512KB (smaller)
         totalGzipSize: 256 * 1024,
       };
-      const markdown = generateProjectMarkdown('test-project', 'path/to/file.json', mockAnalysis, baseline);
+      const markdown = generateProjectMarkdown(
+        'test-project',
+        'path/to/file.json',
+        mockAnalysis,
+        baseline,
+      );
       expect(markdown).toContain('### 📁 test-project');
       expect(markdown).toContain('**Path:** `path/to/file.json`');
       expect(markdown).toContain('+512.0 KB');
@@ -80,9 +89,15 @@ describe('Report Module', () => {
     });
 
     it('should include project name in title', () => {
-      const markdown = generateProjectMarkdown('my-app', 'packages/my-app/dist/.rsdoctor/rsdoctor-data.json', mockAnalysis);
+      const markdown = generateProjectMarkdown(
+        'my-app',
+        'packages/my-app/dist/.rsdoctor/rsdoctor-data.json',
+        mockAnalysis,
+      );
       expect(markdown).toContain('### 📁 my-app');
-      expect(markdown).toContain('packages/my-app/dist/.rsdoctor/rsdoctor-data.json');
+      expect(markdown).toContain(
+        'packages/my-app/dist/.rsdoctor/rsdoctor-data.json',
+      );
     });
   });
 

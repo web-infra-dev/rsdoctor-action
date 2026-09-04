@@ -4,13 +4,12 @@
 
 ## Related
 
-
 ## Validation
 
 <!-- Mark the checks you ran, or explain why they are not needed. -->
 
 - [ ] `pnpm run build`
-- [ ] `pnpm run lint`
+- [ ] `pnpm run check`
 - [ ] `pnpm run test`
 - [ ] Example projects still build, if affected
 
