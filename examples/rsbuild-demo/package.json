@@ -14,7 +14,7 @@
   },
   "devDependencies": {
     "@rsbuild/core": "^2.2.0",
-    "@rsdoctor/rspack-plugin": "1.6.3",
+    "@rsdoctor/core": "2.0.0-beta.1",
     "@rsbuild/plugin-react": "^2.1.0",
     "@types/react": "^19.1.13",
     "@types/react-dom": "^19.1.9",
