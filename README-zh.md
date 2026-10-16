@@ -12,7 +12,7 @@ Rsdoctor GitHub Action，使用 [Rsdoctor](https://github.com/web-infra-dev/rsdo
 
 ### 1. 配置插件
 
-安装 Rsdoctor 插件，并开启 Brief 模式和 `output.options.type: ['json']`。配置示例如下，
+安装 `@rsdoctor/core@2`（需要 Rspack 2 或兼容的 Rsbuild 版本），并开启 Brief 模式和 `output.options.type: ['json']`。Rsdoctor 2 要求 Node.js `^20.19.0 || >=22.12.0`。配置示例如下：
 
 - Rsbuild 集成示例
 
@@ -20,7 +20,7 @@ Rsdoctor GitHub Action，使用 [Rsdoctor](https://github.com/web-infra-dev/rsdo
 // rsbuild.config.ts
 import { defineConfig } from '@rsbuild/core';
 import { pluginReact } from '@rsbuild/plugin-react';
-import { RsdoctorRspackPlugin } from '@rsdoctor/rspack-plugin';
+import { RsdoctorRspackPlugin } from '@rsdoctor/core';
 
 export default defineConfig({
   plugins: [pluginReact()],
@@ -48,7 +48,7 @@ export default defineConfig({
 - uses: web-infra-dev/rsdoctor-action@main
   with:
     # Rsdoctor JSON 数据文件路径（相对于项目根目录）
-    file_path: 'dist/.rsdoctor/rsdoctor-data.json'
+    file_path: 'dist/rsdoctor-data.json'
 
     # 用于比较的目标分支（默认为仓库的默认分支），如果想使用动态目标分支，可以使用 `target_branch: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.ref || github.event.repository.default_branch }}`
     target_branch: 'main'
@@ -122,7 +122,7 @@ jobs:
       - name: Bundle Analysis
         uses: web-infra-dev/rsdoctor-action@main
         with:
-          file_path: 'dist/.rsdoctor/rsdoctor-data.json'
+          file_path: 'dist/rsdoctor-data.json'
           target_branch: 'main'
 ```
 
@@ -148,9 +148,10 @@ Action 生成多种格式的综合报告：
 
 此 Action 适用于任何支持 Rsdoctor 的构建工具：
 
-- ✅ **Rsbuild** - 通过 `@rsdoctor/rspack-plugin` 原生支持
-- ✅ **Webpack** - 通过 `@rsdoctor/webpack-plugin` 支持
-- ✅ **Rspack** - 通过 `@rsdoctor/rspack-plugin` 原生支持
+- ✅ **Rsbuild** - 通过 `@rsdoctor/core` 和 Rspack 2 支持
+- ✅ **Rspack** - 通过 `@rsdoctor/core` 原生支持
+
+Rsdoctor 2 不支持 webpack。升级后数据文件路径与 1.x 不同，首次运行可能找不到基线产物；后续运行可使用新基线比较。
 
 ## 故障排除
 

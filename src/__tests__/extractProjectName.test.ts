@@ -3,7 +3,15 @@ import { describe, it, expect } from 'rstack/test';
 import { extractProjectName } from '../index';
 
 describe('extractProjectName', () => {
-  describe('monorepo - single entry (default .rsdoctor output)', () => {
+  describe('monorepo - single entry', () => {
+    it('should handle Rsdoctor 2 output at the build root', () => {
+      const filePath = path.join(
+        process.cwd(),
+        'examples/rsbuild-demo/dist/rsdoctor-data.json',
+      );
+      expect(extractProjectName(filePath)).toBe('rsbuild-demo');
+    });
+
     it('should return package name only', () => {
       const filePath = path.join(
         process.cwd(),

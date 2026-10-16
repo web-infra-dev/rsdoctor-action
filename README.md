@@ -12,13 +12,13 @@ See the step-by-step guide: [Rsdoctor Action Integration](https://rsdoctor.rs/gu
 
 ### 1. Configure the plugin
 
-Install the Rsdoctor plugin, enable Brief mode, and set `output.options.type: ['json']`. Example:
+Install `@rsdoctor/core@2` with Rspack 2 or a compatible Rsbuild version, enable Brief mode, and set `output.options.type: ['json']`. Rsdoctor 2 requires Node.js `^20.19.0 || >=22.12.0`. Example:
 
 ```typescript
 // rsbuild.config.ts
 import { defineConfig } from '@rsbuild/core';
 import { pluginReact } from '@rsbuild/plugin-react';
-import { RsdoctorRspackPlugin } from '@rsdoctor/rspack-plugin';
+import { RsdoctorRspackPlugin } from '@rsdoctor/core';
 
 export default defineConfig({
   plugins: [pluginReact()],
@@ -46,7 +46,7 @@ export default defineConfig({
 - uses: web-infra-dev/rsdoctor-action@main
   with:
     # Path to Rsdoctor JSON data file (relative to project root)
-    file_path: 'dist/.rsdoctor/rsdoctor-data.json'
+    file_path: 'dist/rsdoctor-data.json'
 
     # Target branch for comparison (defaults to the repository default branch). If you prefer a dynamic
     # target based on the PR's base branch (instead of always using main), you can use:
@@ -144,7 +144,7 @@ jobs:
         env:
           AI_TOKEN: ${{ secrets.AI_TOKEN }}
         with:
-          file_path: 'dist/.rsdoctor/rsdoctor-data.json'
+          file_path: 'dist/rsdoctor-data.json'
           target_branch: 'main'
 ```
 
@@ -170,9 +170,11 @@ When baseline data is available, the action generates an interactive HTML diff r
 
 This action works with any build tool that supports Rsdoctor:
 
-- ✅ **Rsbuild** - Native support with `@rsdoctor/rspack-plugin`
-- ✅ **Webpack** - Support via `@rsdoctor/webpack-plugin`
-- ✅ **Rspack** - Native support with `@rsdoctor/rspack-plugin`
+- ✅ **Rsbuild** - Support with `@rsdoctor/core` and Rspack 2
+- ✅ **Rspack** - Native support with `@rsdoctor/core`
+- ✅ **Webpack** - For standalone Rsdoctor 1.x, use [`@rsdoctor/webpack-plugin@1.6.5`](https://www.npmjs.com/package/@rsdoctor/webpack-plugin/v/1.6.5) with `@rsdoctor/cli@1.6.5`. To use this Action, pair [Action `v1.1.4`](https://github.com/web-infra-dev/rsdoctor-action/tree/v1.1.4) with `@rsdoctor/webpack-plugin@1.5.12` because it bundles CLI 1.5.12; set `file_path` to `dist/.rsdoctor/rsdoctor-data.json`.
+
+Rsdoctor 2 does not support webpack. After changing the data file path from Rsdoctor 1.x, the first run may not find a baseline artifact; later runs can compare against the new baseline.
 
 ## Troubleshooting
 

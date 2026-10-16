@@ -352,7 +352,7 @@ async function processSingleFile(
         }
       }
 
-      // Generate JSON diff for AI analysis (requires @rsdoctor/cli >= 1.5.6-canary.0)
+      // Generate JSON diff for AI analysis.
       if (
         aiToken &&
         hasBundleAnalysisChange(currentBundleAnalysis, report.baseline)

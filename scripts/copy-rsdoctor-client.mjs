@@ -1,4 +1,10 @@
-import { cpSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+import {
+  cpSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';
 import { createRequire } from 'node:module';
 
@@ -43,5 +49,7 @@ for (const sourcePath of filesToCopy) {
   mkdirSync(dirname(targetPath), { recursive: true });
   cpSync(sourcePath, targetPath);
 }
+
+writeFileSync(resolve(targetRoot, 'dist', 'index.html'), '');
 
 console.log(`Copied @rsdoctor/client diff assets to ${targetRoot}`);
