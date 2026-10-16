@@ -172,6 +172,7 @@ This action works with any build tool that supports Rsdoctor:
 
 - ✅ **Rsbuild** - Support with `@rsdoctor/core` and Rspack 2
 - ✅ **Rspack** - Native support with `@rsdoctor/core`
+- ✅ **Webpack** - Use [`@rsdoctor/webpack-plugin@1.5.12`](https://www.npmjs.com/package/@rsdoctor/webpack-plugin/v/1.5.12) with [Action `v1.1.4`](https://github.com/web-infra-dev/rsdoctor-action/tree/v1.1.4); set `file_path` to `dist/.rsdoctor/rsdoctor-data.json`.
 
 Rsdoctor 2 does not support webpack. After changing the data file path from Rsdoctor 1.x, the first run may not find a baseline artifact; later runs can compare against the new baseline.
 
