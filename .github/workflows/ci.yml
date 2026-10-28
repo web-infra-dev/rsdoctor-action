@@ -57,6 +57,12 @@ jobs:
           pnpm install --ignore-scripts
           pnpm run build
 
+      - name: Reproduce missing caniuse-lite in the published action
+        run: |
+          isolated_root="$(mktemp -d)"
+          cp -R dist "$isolated_root/dist"
+          node -e 'require("node:module").createRequire(process.argv[1])("caniuse-lite/dist/unpacker/agents")' "$isolated_root/dist/rsdoctor-cli.js"
+
       - name: Run Checks
         run: |
           pnpm run check
