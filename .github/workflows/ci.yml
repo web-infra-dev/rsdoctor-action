@@ -73,6 +73,33 @@ jobs:
           cd ../rsbuild-demo2
           pnpm run build
 
+      - name: Name demo baseline artifact
+        if: github.event_name == 'pull_request'
+        id: demo_baseline
+        env:
+          BASELINE_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          echo "name=$(node -e 'const {createHash}=require("node:crypto"); const file="examples/rsbuild-demo/dist/rsdoctor-data.json"; const hash=createHash("sha256").update(file.replaceAll("/","-")+"-rsdoctor-data").digest("hex").slice(0,8); process.stdout.write("rsdoctor-"+hash+"-"+process.env.BASELINE_SHA.slice(0,10))')" >> "$GITHUB_OUTPUT"
+
+      - name: Upload demo baseline
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: ${{ steps.demo_baseline.outputs.name }}
+          path: examples/rsbuild-demo/dist/rsdoctor-data.json
+
+      - name: Generate HTML diff from demo baseline
+        if: github.event_name == 'pull_request'
+        uses: ./
+        with:
+          file_path: examples/rsbuild-demo/dist/rsdoctor-data.json
+          target_branch: ${{ github.head_ref }}
+          enable_ai_analysis: 'false'
+
+      - name: Require demo HTML diff
+        if: github.event_name == 'pull_request'
+        run: test -f rsdoctor-diff-rsbuild-demo.html
+
       - name: Report Compressed Size
         uses: ./
         env:
