@@ -1,5 +1,6 @@
 // Configuration guide: https://rstack.rs/config
 import { define } from 'rstack';
+import { resolve } from 'node:path';
 
 define.lib({
   lib: [
@@ -37,6 +38,14 @@ define.lib({
       },
       tools: {
         rspack: {
+          module: {
+            rules: [
+              {
+                test: /[\\/]@rsdoctor[\\/]core[\\/]dist[\\/]r\.js$/,
+                use: [resolve('scripts/bundle-caniuse-lite.cjs')],
+              },
+            ],
+          },
           resolve: {
             alias: {
               bufferutil: false,
